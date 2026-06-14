@@ -1,149 +1,112 @@
 # DevTeam Project Configuration
 # Copy this to your project's .devteam/config.yaml and customize
 
-version: "1.0"
+version: "2.0"  # bumped for v6.0 pipeline additions
 
 # Project metadata
 project:
-  name: ""  # Auto-detected from package.json/pyproject.toml if empty
-  type: auto  # auto, web, api, cli, library, fullstack
+  name: ""  # Auto-detected from build.gradle.kts if empty
+  type: auto  # auto, kotlin-spring, library, fullstack
 
-# Model selection configuration
+# ============================================================================
+# KOTLIN + SPRING SKILL SOURCE (v6.0)
+# ============================================================================
+kotlin_skills:
+  source: vendors/kotlin-backend-agent-skills
+  sync_command: bash scripts/sync-kotlin-skills.sh
+  auto_sync_on_install: true
+
+# ============================================================================
+# PIPELINE (v6.0)
+# ============================================================================
+pipeline:
+  stages: [analytics, development, testing]
+  parallelism: intra-stage  # between stages = sequential, within = parallel
+  skip_stage: null  # or "analytics" | "development" | "testing"
+
+  # Per-agent retry on failure
+  retry:
+    per_agent: 2
+    on_failure: halt_stage  # halt_stage | skip_failed_agent | halt_pipeline
+
+  # Coverage threshold for Stage 3
+  coverage:
+    threshold: 80  # percent
+
+# Per-stage sub-agent configuration
+stages:
+  analytics:
+    sub_agents: [requirements-analyst, db-schema-reader, code-archaeologist, api-spec-reader]
+    code_archaeologist_required: false  # true for hybrid, false for greenfield
+    api_spec_reader_required: false     # true if OpenAPI/Swagger detected
+
+  development:
+    sub_agents: [kotlin-api-developer, kotlin-data-architect, kotlin-config-specialist, kotlin-integration-specialist]
+    independent_components_detection: true  # if false, sequential
+
+  testing:
+    sub_agents: [kotlin-unit-test-engineer, kotlin-integration-test-engineer, kotlin-e2e-test-engineer]
+    coverage_threshold: 80  # percent
+
+# ============================================================================
+# QUALITY GATES (KOTLIN TOOLCHAIN)
+# ============================================================================
+quality_gates:
+  required: [tests, typecheck, lint, scope]
+  kotlin:
+    lint: [ktlint, detekt]
+    coverage_tool: kover
+    coverage_threshold: 80
+    test_command: ./gradlew test integrationTest e2eTest
+    build_command: ./gradlew compileKotlin compileTestKotlin
+  coverage:
+    threshold: 80
+
+# ============================================================================
+# HOOKS (v5/v6 — kept for cross-version compatibility)
+# ============================================================================
+hooks:
+  enabled: true
+  state_file: .devteam/circuit-breaker.json
+  scope_check:
+    enabled: true
+    forbidden_patterns:
+      - "rm -rf /"
+      - "DROP DATABASE"
+  session_tracking:
+    enabled: true
+    checkpoint_dir: .devteam/checkpoints
+
+# ============================================================================
+# MODEL SELECTION (v5 — kept, no longer driving model choice in v6.0)
+# ============================================================================
 model_selection:
   # NOTE: strategy is documentation-only; not consumed by code.
-  # Model selection is handled by plugin.json assignments and agent markdown escalation logic.
-  strategy: fixed  # fixed, cost-optimized (documentation-only, not consumed by code)
-
-  # Complexity thresholds (0-14 scale)
+  # Model selection is handled by Qwen Code itself (not by DevTeam).
+  strategy: fixed
   thresholds:
-    simple: 4      # 0-4: Use Haiku
-    moderate: 8    # 5-8: Use Sonnet
-    complex: 14    # 9+: Use Opus
+    simple: 4
+    moderate: 8
+    complex: 14
 
-  # Override for specific task types
-  task_overrides:
-    security: opus      # Always use Opus for security tasks
-    architecture: opus  # Always use Opus for architecture
-    documentation: haiku
-    testing: sonnet
-
-  # Progression on failure (iterations before upgrade)
-  progression:
-    haiku_to_sonnet: 2
-    sonnet_to_opus: 2
-
-# Autonomous mode settings
-autonomous:
+# ============================================================================
+# ANTI-ABANDONMENT (v5 — kept, enforced via persistence hook)
+# ============================================================================
+anti_abandonment:
   enabled: true
-  max_iterations: 50
+  max_iterations: 10
+  forbidden_phrases:
+    - "I cannot"
+    - "I'm unable to"
+    - "I give up"
+    - "You should try manually"
+    - "This requires human intervention"
+  trigger_on_idle_prompt: true
 
-  circuit_breaker:
-    max_consecutive_failures: 5
-    cooldown_minutes: 5
-
-  checkpoints:
-    frequency: every_sprint  # every_task, every_sprint, manual
-    auto_commit: true
-
-  exit_conditions:
-    - "All tasks completed"
-    - "All acceptance criteria met"
-    - "User requests stop"
-    - "Circuit breaker triggered"
-
-# Parallel execution settings
-parallel:
-  enabled: true
-  max_concurrent_tasks: 3
-
-  # Task types that can run in parallel
-  parallelizable:
-    - testing
-    - documentation
-    - frontend
-    - backend  # Only if no shared state
-
-  # Task types that must run sequentially
-  sequential:
-    - database_migration
-    - security
-    - deployment
-
-# Quality gates
-quality:
-  # Pre-commit checks
-  pre_commit:
-    lint: true
-    typecheck: true
-    test: false  # Can be slow
-
-  # Sprint completion requirements
-  sprint_completion:
-    tests_must_pass: true
-    minimum_coverage: 0  # Set to 0 to disable, or percentage
-    no_type_errors: true
-    build_must_succeed: true
-
-  # Bug Council activation threshold
-  bug_council:
-    enabled: true
-    activation_threshold: 3  # Iterations before convening
-    require_consensus: false  # Require majority vote
-
-# Language Server Protocol configuration
-lsp:
-  auto_detect: true
-  enabled_languages: []  # Empty = auto-detect, or list specific: [typescript, python]
-
-  # Workspace roots for multi-project repos
-  workspaces: []  # Auto-detected if empty
-
-# Memory and learning
-memory:
-  session_persistence: true
-  max_session_files: 10
-
-  learned_patterns:
-    enabled: true
-    min_confidence: 0.7
-    max_patterns: 50
-
-# GitHub integration
-github:
-  auto_create_issues: false
-  auto_create_prs: false
-  issue_labels:
-    - devteam
-    - automated
-  pr_template: |
-    ## Summary
-    {summary}
-
-    ## Changes
-    {changes}
-
-    ## Testing
-    {testing}
-
-    ---
-    *Generated by DevTeam*
-
-# Notifications (future feature)
-notifications:
-  on_sprint_complete: false
-  on_error: false
-  on_pr_created: false
-
-# Custom agent overrides
-agents:
-  # Disable specific agents
-  disabled: []
-
-  # Agent-specific configuration
-  config: {}
-
-# Debug settings
-debug:
-  verbose_logging: false
-  save_agent_outputs: false
-  dry_run: false  # Plan but don't execute
+# ============================================================================
+# BUDGET (v5 — kept, observed but not enforced)
+# ============================================================================
+budget:
+  session_budget_usd: 10.00
+  daily_budget_usd: 50.00
+  warn_at_percent: 80

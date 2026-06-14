@@ -99,8 +99,8 @@ From the comprehensive agent review:
 
 ```bash
 # From any Claude Code project
-/plugin marketplace add file:///home/wburit/devteam
-/plugin install devteam
+qwen extensions install file:///home/wburit/devteam
+qwen extensions install devteam
 ```
 
 ### Publish to GitHub (Optional)
@@ -123,8 +123,8 @@ git push -u origin main
 # 4. Update plugin.json with GitHub URL and commit
 
 # 5. Install from GitHub
-/plugin marketplace add https://github.com/YOUR_USERNAME/devteam
-/plugin install devteam
+qwen extensions install https://github.com/YOUR_USERNAME/devteam
+qwen extensions install devteam
 ```
 
 ---
@@ -155,8 +155,8 @@ echo "Haiku agents: $(jq -r '.agents[] | select(.model=="haiku") | .id' plugin.j
 
 ```bash
 # Install plugin
-/plugin marketplace add file:///home/wburit/devteam
-/plugin install devteam
+qwen extensions install file:///home/wburit/devteam
+qwen extensions install devteam
 
 # Verify installation
 /plugin list  # Should show devteam
@@ -321,8 +321,8 @@ User → Main Claude → sprint-orchestrator → task-loop → specialized agent
 
 ```bash
 cd ~/test-project
-/plugin marketplace add file:///home/wburit/devteam
-/plugin install devteam
+qwen extensions install file:///home/wburit/devteam
+qwen extensions install devteam
 
 # Verify
 /plugin list
@@ -356,7 +356,7 @@ Follow instructions in INSTALLATION.md
 
 ```bash
 cd ~/your-actual-project
-/plugin install devteam
+qwen extensions install devteam
 /devteam:prd
 ```
 
@@ -483,7 +483,7 @@ Your multi-agent development system is now a professional, reusable Claude Code 
 
 **Start building:**
 ```bash
-/plugin install devteam
+qwen extensions install devteam
 /devteam:prd
 ```
 

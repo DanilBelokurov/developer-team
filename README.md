@@ -1,847 +1,838 @@
-# DevTeam: Multi-Agent Autonomous Development System
+# DevTeam для Qwen Code — Руководство пользователя
 
-A Claude Code plugin providing **127 specialized AI agents** with:
-- **Interview-driven planning** - Clarify requirements before work begins
-- **Codebase research** - Investigate patterns and blockers before implementation
-- **SQLite state management** - Reliable session tracking and cost analytics
-- **Model escalation** - Automatic haiku → sonnet → opus progression
-- **Bug Council** - 5-agent diagnostic team for complex issues
-- **Eco mode** - Cost-optimized execution mode for simpler tasks
-- **Quality gates** - Tests, types, lint, security, coverage enforcement
+**Версия**: 6.0.0 (пайплайн для Kotlin + Spring backend)
+**Аудитория**: пользователи (не разработчики) расширения DevTeam для Qwen Code
+**Время чтения**: ~20 минут полностью; ~5 минут только Quick Start
 
 ---
 
-## How This Works
+## Содержание
 
-This is a **Claude Code plugin** composed of:
-- **Markdown agent instructions** (`agents/*.md`) — Claude Code reads these and follows them as subagent prompts via the Task tool
-- **YAML configuration** (`.devteam/*.yaml`) — defines capabilities, thresholds, and agent selection triggers
-- **Shell scripts** (`scripts/*.sh`, `hooks/*.sh`) — handle state persistence (SQLite), event logging, hook lifecycle, and database management
-- **Slash commands** (`commands/*.md`, `skills/*/SKILL.md`) — user-facing commands that orchestrate agent workflows
-
-There is no separate executable orchestrator. **Claude Code itself is the runtime** — it reads the agent markdown files, selects appropriate agents based on task characteristics, and executes them as subagents. The shell scripts provide supporting infrastructure (database, hooks, state tracking) but the orchestration logic lives in the agent instructions themselves.
+1. [Что такое DevTeam?](#1-что-такое-devteam)
+2. [Быстрый старт (5 минут)](#2-быстрый-старт-5-минут)
+3. [Пайплайн из 3 этапов](#3-пайплайн-из-3-этапов)
+4. [Справочник команд](#4-справочник-команд)
+5. [Примеры использования](#5-примеры-использования)
+6. [Флаги и опции](#6-флаги-и-опции)
+7. [Конфигурация](#7-конфигурация)
+8. [Состояние и персистентность](#8-состояние-и-персистентность)
+9. [Troubleshooting](#9-troubleshooting)
+10. [FAQ](#10-faq)
+11. [Глоссарий](#11-глоссарий)
 
 ---
 
-## Key Features
+## 1. Что такое DevTeam?
 
-### Autonomous Development with Task Loop
+DevTeam — это **расширение Qwen Code**, которое запускает
+мульти-агентный пайплайн разработки для проектов на **Kotlin +
+Spring backend**. Оно диспатчит 18 специализированных AI-сабагентов
+параллельно для end-to-end реализации фич: анализ → код → тесты.
 
-**Task Loop** is the iterative quality enforcement system that ensures every task is completed to specification:
+### Когда использовать
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                       TASK LOOP                              │
-│                                                              │
-│   Execute → Quality Gates → Pass? → Complete                 │
-│      ↑           │                                           │
-│      │          Fail                                         │
-│      │           ↓                                           │
-│      └─── Fix Tasks ← Model Escalation (if needed)          │
-│                                                              │
-│   Loop until: ALL QUALITY GATES PASS                        │
-└─────────────────────────────────────────────────────────────┘
-```
+Используйте `/devteam:build`, когда:
 
-**Features:**
-- Automatic model escalation (haiku → sonnet → opus) after failures
-- Stuck loop detection with Bug Council activation
-- Quality gates: tests, types, lint, security, coverage
-- Anti-abandonment system prevents agents from giving up
-- Maximum 10 iterations with human notification
+- ✅ Вы начинаете новую фичу, затрагивающую несколько файлов
+  (controller + service + repository + config)
+- ✅ Хотите автоматическую генерацию тестов (unit + integration + e2e)
+- ✅ Хотите, чтобы AI сначала понял существующую схему и код, а
+  потом реализовал
+- ✅ У вас Kotlin + Spring проект с Gradle
 
-### Intelligent Agent Selection
+**Не используйте для**:
 
-The `/devteam:implement` command automatically selects the best agents for your task:
+- ❌ Исправлений в одну строку или тривиальных изменений — правите
+  напрямую
+- ❌ Не-Kotlin/Spring проектов (Python, JS, frontend и т.д.)
+- ❌ Когда нужно только прочитать/исследовать код без реализации —
+  используйте сабагент `Explore` или `/skills` напрямую
+
+### Что вы получаете
+
+Одной командой вы получаете:
+
+1. **Структурированный анализ** — требования, понимание схемы, API
+   контракт, package layout
+2. **Production-код** — реализован параллельно в 4 файловых
+   партициях (API, data, config, integration)
+3. **Комплексные тесты** — unit + integration (Testcontainers) + e2e
+   (WireMock)
+4. **Quality gates** — ktlint, detekt, Kover coverage
+   (конфигурируемый порог, по умолчанию 80%)
+5. **Anti-abandonment** — AI не может сдаться; он ретраит или
+   эскалирует на Bug Council
+
+---
+
+## 2. Быстрый старт (5 минут)
+
+### Требования
+
+- **Qwen Code** (свежая версия) — https://qwen-code.dev
+- **Python 3.7+** — нужен для hook-установщика
+- **Java 17+** и **Gradle** — в целевом Kotlin/Spring проекте
+- **Git** — для scope-проверок и worktree-ов
+- **sqlite3** — для персистентного состояния
+- Опционально: **Node.js** (для GitHub MCP интеграции)
+
+### Установка
 
 ```bash
-/devteam:implement "Add user authentication with JWT tokens"
+# 1. Клонируем репозиторий
+git clone https://github.com/michael-harris/devteam.git
+cd devteam
+
+# 2. Инициализируем git submodule (подтягивает 25 upstream Kotlin скилов)
+git submodule update --init --recursive
+
+# 3. Синхронизируем upstream скилы в наш skills/
+bash scripts/sync-kotlin-skills.sh
+# Output: "synced: spring-mvc-webflux-api-builder", "synced: ...", "Done. 25 skills"
+
+# 4. Устанавливаем хуки расширения в настройки Qwen Code
+bash install.sh
+# Output: prerequisites check, MCP server check, hooks merge, DB init
+
+# 5. Перезапускаем Qwen Code (настройки применяются при перезапуске)
 ```
 
-The `/devteam:implement` command analyzes your task description, file types involved, and project context to select appropriate agents. It considers keyword matches, file extensions, task type (feature vs. bug), and detected language/framework.
+### Проверка
 
-### Bug Council: Multi-Perspective Debugging
+После перезапуска Qwen Code откройте новую сессию и выполните:
 
-For complex bugs, the Bug Council convenes 5 specialized analysts:
+```bash
+# Должен показать 35 скилов (25 upstream + 10 оркестрации/crosscutting)
+/skills
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                       BUG COUNCIL                            │
-├─────────────────────────────────────────────────────────────┤
-│  Root Cause Analyst    │ Error analysis, stack traces       │
-│  Code Archaeologist    │ Git history, regression detection  │
-│  Pattern Matcher       │ Similar bugs, anti-patterns        │
-│  Systems Thinker       │ Dependencies, integration issues   │
-│  Adversarial Tester    │ Edge cases, security vectors       │
-└─────────────────────────────────────────────────────────────┘
-                              ↓
-                    Synthesized Solution
+# Должен показать 25 сабагентов
+/agents manage
+
+# Должен отобразить состояние системы
+/devteam:status
 ```
 
-**Activation Triggers:**
-- Critical/high severity bugs
-- 3+ failed opus attempts
-- Complexity score ≥ 10
-- Explicit `bug_council: true` flag
+### Первый запуск пайплайна
 
-### Scope Enforcement
+```bash
+# Попробуйте сначала тривиальную фичу, чтобы увидеть пайплайн в действии
+/devteam:build --feature "Добавить /health endpoint, который возвращает 200 OK с timestamp"
+```
 
-Agents are strictly confined to their assigned scope:
+Наблюдайте за выполнением:
+
+- Этап 1 (Analytics): 3-4 параллельных агента пишут `analysis.md`
+- Этап 2 (Development): 4 параллельных Kotlin-агента реализуют код
+- Этап 3 (Testing): 3 параллельных test-инженера + quality gates
+- Пайплайн завершён → `TASK_COMPLETE` + `EXIT_SIGNAL: true`
+
+---
+
+## 3. Пайплайн из 3 этапов
+
+DevTeam запускает три последовательных этапа. Внутри каждого
+этапа сабагенты работают **параллельно** (истинный параллелизм —
+все они диспатчатся в одном assistant turn).
+
+### Этап 1: Analytics (параллельный)
+
+Цель: понять фичу, существующую кодовую базу и модель данных до
+написания любого кода.
+
+| Сабагент | Всегда? | Что делает |
+|---|---|---|
+| `requirements-analyst` | да | Acceptance criteria, NFR, user stories |
+| `db-schema-reader` | да | Entity map (JPA, Exposed, jOOQ, Flyway) |
+| `code-archaeologist` | только в hybrid | Существующие паттерны, конвенции |
+| `api-spec-reader` | если найден OpenAPI/Swagger | API контракт |
+
+**Hybrid-режим** = у проекта есть история `.git/` ИЛИ существующие
+Kotlin-исходники. **Детекция OpenAPI** = glob для
+`openapi.{yml,yaml,json}` или `swagger.{yml,yaml,json}` (исключая
+`vendors/`).
+
+**Выход**: `.devteam/plans/<plan-id>/analysis.md`
+
+### Этап 2: Development (параллельный, с файловой партицией)
+
+Цель: реализовать фичу в 4 файловых партициях параллельно, без
+конфликтов.
+
+| Сабагент | Owns (владеет) | Spring layout |
+|---|---|---|
+| `kotlin-api-developer` | `**/api/`, `**/controller/`, `**/routes/`, `**/dto/` | Controllers, DTO, services |
+| `kotlin-data-architect` | `**/domain/`, `**/entity/`, `**/repository/`, `db/migration/` | Entities, repos, migrations |
+| `kotlin-config-specialist` | `application*.yml`, `logback*.xml`, `gradle.properties` | Config, profiles, secrets |
+| `kotlin-integration-specialist` | `**/client/`, `**/infrastructure/`, `**/event/`, `**/messaging/` | HTTP clients, queues, events |
+
+**Fallback**: если у вашего проекта нестандартные имена папок
+(например, `presentation/` вместо `api/`), оркестратор детектит
+это из `analysis.md` и инжектит реальные пути. Если layout вообще
+не распознаётся — fallback на **последовательный** Этап 2.
+
+**Выход**: изменения кода + `stage2.merge.md` (проверка пересечений
++ верификация сборки).
+
+### Этап 3: Testing (параллельный)
+
+Цель: комплексное покрытие тестами в трёх областях.
+
+| Сабагент | Область | Инструменты |
+|---|---|---|
+| `kotlin-unit-test-engineer` | `**/*Test.kt` | JUnit 5 + Kotest + MockK |
+| `kotlin-integration-test-engineer` | `**/*IT.kt` | Spring Boot + Testcontainers |
+| `kotlin-e2e-test-engineer` | `**/*E2ETest.kt` | REST Assured + WireMock |
+
+После завершения всех 3 `kotlin-quality-gate-enforcer` запускает:
+- `./gradlew test integrationTest e2eTest`
+- `./gradlew ktlintCheck detekt`
+- `./gradlew koverXmlReport` (покрытие ≥ 80% по умолчанию)
+
+### Quality gates
+
+На каждой границе этапов — гейты:
+
+| Между | Гейт |
+|---|---|
+| 1 → 2 | Анализ завершён (все параллельные агенты записали свои секции) |
+| 2 → 3 | Верификация сборки: `./gradlew compileKotlin ktlintCheck detekt` |
+| 3 → Done | Все тесты прошли, покрытие ≥ порога |
+
+Провал гейта запускает **per-agent retry** (до
+`pipeline.retry.per_agent` раз, по умолчанию 2). После max retries
+этап останавливается со структурированным failure-отчётом.
+
+---
+
+## 4. Справочник команд
+
+### `/devteam:build` — полный пайплайн
+
+Запускает полный 3-этапный пайплайн.
+
+```bash
+/devteam:build --feature "Добавить OAuth login с refresh tokens"
+/devteam:build --feature "Добавить /health endpoint" --skip-stage testing
+/devteam:build --feature "Рефакторинг UserService" --dry-run
+```
+
+**Флаги**:
+- `--feature "..."` (обязательный) — описание фичи
+- `--skip-stage X,Y` — пропустить указанные этапы (analytics, development, testing)
+- `--pipeline.retry.per_agent=N` — переопределить retry count (default 2)
+- `--simulate-fail-stage=NAME` — для тестирования failure-отчёта
+- `--dry-run` — напечатать dispatch-последовательность без вызова агентов
+
+### `/devteam:analyze` — только Этап 1
+
+Запускает только Analytics. Полезно для планирования без
+реализации.
+
+```bash
+/devteam:analyze --feature "Добавить OAuth login"
+```
+
+Выход: `analysis.md` с требованиями, entity map и (если hybrid)
+существующими паттернами.
+
+### `/devteam:develop` — только Этап 2
+
+Запускает только Development. Требует наличия `analysis.md`
+(от предыдущего `analyze` или `build`).
+
+```bash
+/devteam:develop
+/devteam:develop --feature "Добавить OAuth login"   # использует последний plan
+/devteam:develop --plan-id plan-20260614-143022-a3f9
+```
+
+### `/devteam:test` — только Этап 3
+
+Запускает только Testing. Требует наличия изменений кода.
+
+```bash
+/devteam:test
+/devteam:test --feature "Добавить OAuth login"
+```
+
+### `/devteam:review` — read-only code review
+
+Ревью текущих изменений без запуска полного пайплайна.
+
+```bash
+/devteam:review                              # uncommitted
+/devteam:review --files "src/main/kotlin/**"  # конкретные пути
+/devteam:review --since main                 # vs branch
+```
+
+### `/devteam:bug` — диагностика и фикс
+
+Диагностирует и исправляет баги. Опционально активирует Bug Council
+(5 параллельных диагностических агентов) для сложных случаев.
+
+```bash
+/devteam:bug "Login падает для гостевых пользователей"
+/devteam:bug "Утечка памяти под нагрузкой" --council
+/devteam:bug "Race condition в checkout" --severity critical
+```
+
+### Команды observability
+
+| Команда | Назначение |
+|---|---|
+| `/devteam:status` | Dashboard: состояние сессии, прогресс, стоимость |
+| `/devteam:list` | Список всех планов, спринтов, задач |
+| `/devteam:logs` | Просмотр execution logs |
+| `/devteam:reset` | Сброс зависших сессий, очистка circuit breaker |
+
+### Прочие команды
+
+| Команда | Назначение |
+|---|---|
+| `/devteam:worktree` | Управление git worktree (subcommands: status, list, cleanup, merge) |
+| `/devteam:config` | Просмотр/изменение `.devteam/config.yaml` |
+| `/devteam:help` | Помощь по командам |
+| `/devteam:issue` | End-to-end фикс GitHub issue |
+| `/devteam:issue-new` | Создать новый GitHub issue |
+
+---
+
+## 5. Примеры использования
+
+### Пример 1: Новая фича (greenfield проект)
+
+Вы начинаете новый Kotlin/Spring проект, в котором пока мало кода.
+
+```bash
+# Этап 1: Планирование
+/devteam:analyze --feature "Добавить регистрацию пользователей с подтверждением email"
+
+# Просмотр плана
+cat .devteam/plans/<plan-id>/analysis.md
+
+# Этап 2: Реализация
+/devteam:develop
+
+# Этап 3: Тестирование
+/devteam:test
+```
+
+Или все 3 одной командой:
+
+```bash
+/devteam:build --feature "Добавить регистрацию пользователей с подтверждением email"
+```
+
+### Пример 2: Существующий проект, добавление фичи
+
+У вас есть готовый Spring Boot проект. Пайплайн должен определить
+структуру кода и адаптироваться.
+
+```bash
+# Убедитесь, что вы в корне проекта
+cd /path/to/your/spring-project
+
+# Опционально: подключите расширение через link
+qwen extensions link /path/to/devteam
+
+# Планирование + реализация
+/devteam:build --feature "Добавить Kafka consumer для order events"
+
+# Просмотр результата
+git diff
+```
+
+Пайплайн сделает:
+- Детект `.git/` → запуск `code-archaeologist` (hybrid-режим)
+- Чтение существующих entities и repositories
+- Реализация нового кода по конвенциям проекта
+- Генерация тестов, соответствующих существующим паттернам
+
+### Пример 3: Исправление бага
+
+Вы нашли баг. Хотите, чтобы DevTeam диагностировал и починил его.
+
+```bash
+# Простой баг
+/devteam:bug "NullPointerException когда у пользователя не задан email"
+
+# Сложный баг — активируем Bug Council (5 агентов параллельно)
+/devteam:bug "Утечка памяти под высокой нагрузкой" --council
+```
+
+Bug Council запускает 5 специалистов параллельно:
+1. `root-cause-analyst` — анализ ошибок, генерация гипотез
+2. `code-archaeologist` — git history, детекция регрессий
+3. `pattern-matcher` — похожие баги, anti-patterns
+4. `systems-thinker` — архитектурные проблемы
+5. `adversarial-tester` — edge cases, векторы атак
+
+После 5 отчётов оркестратор синтезирует унифицированный план
+фикса и делегирует подходящему специалисту.
+
+### Пример 4: Тестирование существующего кода
+
+Вы уже реализовали код вручную и хотите, чтобы DevTeam написал
+для него тесты.
+
+```bash
+# Пропускаем Этапы 1 и 2, запускаем только Этап 3
+/devteam:build --feature "Добавить тесты для существующего кода" --skip-stage analytics,development
+```
+
+### Пример 5: Только планирование (без реализации)
+
+Вы хотите понять, что повлечёт за собой фича, прежде чем
+коммититься на реализацию.
+
+```bash
+/devteam:analyze --feature "Мигрировать с JPA на jOOQ"
+
+# Просмотр плана
+cat .devteam/plans/<plan-id>/analysis.md
+# - Requirements: ...
+# - Entity Map: ...
+# - Existing Patterns: ...
+# - Package Layout: ...
+# - Estimated complexity: ...
+```
+
+Затем, позже, если захотите реализовать:
+
+```bash
+/devteam:develop
+```
+
+Пайплайн читает существующий `analysis.md` и пропускает
+ре-анализ.
+
+---
+
+## 6. Флаги и опции
+
+### `--feature "..."` (обязательный для build/analyze/develop)
+
+Описание фичи. Будьте конкретны:
+
+- ✅ Хорошо: "Добавить OAuth login с refresh tokens, поддержка
+  Google и GitHub провайдеров, с PKCE flow"
+- ❌ Слишком расплывчато: "Добавить login"
+
+### `--skip-stage X,Y`
+
+Пропустить один или несколько этапов. Валидные значения:
+`analytics`, `development`, `testing`. Поддерживает как
+comma-separated, так и space-separated (в кавычках).
+
+```bash
+# Только Этап 1 (Analytics)
+/devteam:build --feature "X" --skip-stage development,testing
+
+# Только Этап 2 (после ручного анализа)
+/devteam:build --feature "X" --skip-stage analytics
+
+# Только Этап 3 (после ручной реализации)
+/devteam:build --feature "X" --skip-stage analytics,development
+```
+
+**Ошибки**:
+- `--skip-stage banana` → `ERROR: --skip-stage 'banana' is not one of: analytics development testing`
+- `--skip-stage analytics analytics` → `ERROR: --skip-stage 'analytics' specified twice`
+- `--skip-stage` (без значения) → `ERROR: --skip-stage requires an argument`
+
+### `--dry-run`
+
+Напечатать запланированную dispatch-последовательность без вызова
+агентов. Полезно для верификации и понимания структуры пайплайна.
+
+```bash
+/devteam:build --feature "Добавить /health endpoint" --dry-run
+```
+
+Пример вывода:
+
+```
+DRY-RUN: /devteam:build --feature "Add /health endpoint"
+Stage 0: Initialize
+  -> set session_state: stage.analytics.status = "pending"
+  -> set session_state: stage.development.status = "pending"
+  -> set session_state: stage.testing.status = "pending"
+Stage 1: Analytics (parallel)
+  Predicate is_hybrid_predicate: true -> code-archaeologist INCLUDED
+  Predicate has_api_spec: false -> api-spec-reader SKIPPED
+  -> agent(requirements-analyst, ...)
+  -> agent(db-schema-reader, ...)
+  -> agent(code-archaeologist, ...)
+Stage 2: Development (parallel, file partition)
+  -> agent(kotlin-api-developer) — owns: **/api/, **/controller/
+  -> agent(kotlin-data-architect) — owns: **/domain/, db/migration/
+  -> agent(kotlin-config-specialist) — owns: application*.yml
+  -> agent(kotlin-integration-specialist) — owns: **/client/, **/event/
+  Overlaps: none
+Stage 3: Testing (parallel)
+  -> agent(kotlin-unit-test-engineer, ...)
+  -> agent(kotlin-integration-test-engineer, ...)
+  -> agent(kotlin-e2e-test-engineer, ...)
+Retry policy: per_agent=2, on_failure=halt_stage
+EXIT_SIGNAL: true
+```
+
+### `--simulate-fail-stage=NAME`
+
+Протестировать формат failure-отчёта. Полезно для разработки и CI.
+
+```bash
+/devteam:build --feature "X" --simulate-fail-stage=development
+```
+
+Пример вывода:
+
+```
+STAGE 2 FAILED
+Failed agents (retries exhausted):
+  - kotlin-data-architect: 2/2 retries. Last error: simulated failure
+Succeeded agents (output preserved):
+  - kotlin-api-developer: 12 files
+  - kotlin-config-specialist: 1 file
+  - kotlin-integration-specialist: 3 files
+```
+
+### `--pipeline.retry.per_agent=N`
+
+Переопределить количество retry по умолчанию (2).
+
+```bash
+/devteam:build --feature "X" --pipeline.retry.per_agent=3
+```
+
+---
+
+## 7. Конфигурация
+
+DevTeam читает конфигурацию из `.devteam/config.yaml` в корне
+вашего проекта.
+
+### Просмотр текущей конфигурации
+
+```bash
+/devteam:config --show
+```
+
+### Ключевые настройки
 
 ```yaml
-scope:
-  allowed_files:
-    - "src/auth/*.py"
-  forbidden_directories:
-    - "src/billing/"
-  max_files_changed: 5
+# Поведение пайплайна
+pipeline:
+  retry:
+    per_agent: 2        # max retries на упавшего агента
+    on_failure: halt_stage   # или skip_failed_agent, halt_pipeline
+  coverage:
+    threshold: 80       # процент
+
+# Quality gates
+quality_gates:
+  kotlin:
+    lint: [ktlint, detekt]
+    coverage_tool: kover
+    test_command: ./gradlew test integrationTest e2eTest
 ```
 
-**6 Enforcement Layers:**
-1. Task scope definition in YAML
-2. Agent prompt constraints
-3. Scope validator agent with VETO power
-4. Pre-commit hook blocking
-5. Runtime file access control
-6. Out-of-scope observations logging
+### Редактирование конфигурации
 
-### Anti-Abandonment System
-
-Agents cannot give up. The persistence system ensures completion:
-
+```bash
+/devteam:config --set pipeline.coverage.threshold=90
 ```
-Abandonment Attempt → Detected → Re-engagement Prompt
-         ↓
-    Still stuck?
-         ↓
-    Model Escalation (haiku → sonnet → opus)
-         ↓
-    Still stuck?
-         ↓
-    Bug Council Activation
-         ↓
-    Still stuck?
-         ↓
-    Human Notification (but keep trying)
+
+Или редактируйте `.devteam/config.yaml` напрямую. Изменения
+вступают в силу при следующем запуске пайплайна.
+
+### Сброс к defaults
+
+```bash
+/devteam:config --reset
 ```
 
 ---
 
-## 127 Specialized Agents
+## 8. Состояние и персистентность
 
-### Enterprise Roles
+DevTeam сохраняет всё состояние в `.devteam/devteam.db` (SQLite) в
+корне вашего проекта. Эта директория в `.gitignore`.
 
-| Category | Agents | Capabilities |
-|----------|--------|--------------|
-| **SRE** | Site Reliability Engineer | SLOs, incident response, chaos engineering |
-| **SRE** | Platform Engineer | Internal developer platforms, golden paths |
-| **SRE** | Observability Engineer | Metrics, logging, tracing, alerting |
-| **Security** | Penetration Tester | OWASP testing, API security, vuln assessment |
-| **Security** | Compliance Engineer | SOC2, HIPAA, GDPR, PCI-DSS |
-| **Product** | Product Manager | PRDs, roadmaps, user research |
-| **Quality** | Accessibility Specialist | WCAG 2.1, screen readers, inclusive design |
-| **DevRel** | Developer Advocate | Technical content, community, DX |
+### Что хранится
 
-### Orchestration Agents
+- **Sessions** — одна строка на вызов команды
+- **session_state** KV — трекинг этапов, retry counts и т.д.
+- **events** — полный лог прохождения/провала гейтов, вызовов агентов
+- **tasks** — атомарные единицы работы с acceptance criteria
+- **gates** — результаты quality gate
 
-| Agent | Purpose |
-|-------|---------|
-| **Autonomous Controller** | Execution loop management, state transitions, circuit breaker |
-| **Bug Council Orchestrator** | Multi-perspective bug analysis |
-| **Code Review Coordinator** | Cross-agent code review orchestration |
-| **Quality Gate Enforcer** | Run and aggregate quality gate results |
-| **Requirements Validator** | Validate acceptance criteria met |
-| **Scope Validator** | Enforce scope boundaries |
-| **Sprint Loop** | Sprint-level quality validation after all tasks |
-| **Sprint Orchestrator** | Sprint execution management, task sequencing |
-| **Task Loop** | Iterative quality loop for single task execution |
-| **Track Merger** | Merge parallel worktree tracks |
-| **Workflow Compliance** | Meta-validator auditing orchestration process |
+### Что в `.devteam/plans/<plan-id>/`
 
-### Bug Council Agents
+Для каждого запуска пайплайна создаётся директория:
 
-| Agent | Specialty |
-|-------|-----------|
-| **Root Cause Analyst** | Error analysis, hypothesis generation |
-| **Code Archaeologist** | Git history, regression detection |
-| **Pattern Matcher** | Similar bugs, anti-pattern identification |
-| **Systems Thinker** | Dependencies, architectural issues |
-| **Adversarial Tester** | Edge cases, security vulnerabilities |
-
-### Implementation Agents
-
-**Backend (by language):**
-- Python (FastAPI, Django, Flask)
-- TypeScript (Express, NestJS, Fastify)
-- Go (Gin, Echo, Fiber)
-- Java (Spring Boot, Micronaut)
-- C# (ASP.NET Core)
-- Ruby (Rails, Sinatra)
-- PHP (Laravel, Symfony)
-
-**Frontend:**
-- React, Vue, Svelte, Angular specialists
-- Accessibility specialist
-- Performance auditor
-
-**Database:**
-- Schema designers
-- Query optimization specialists
-- Migration specialists
-
-**DevOps:**
-- CI/CD Specialist (GitHub Actions, Jenkins, GitLab CI)
-- Docker Specialist
-- Kubernetes Specialist
-- Terraform Specialist
-
-### Quality Agents
-
-| Agent | Focus |
-|-------|-------|
-| **Test Writer** | Unit, integration, e2e tests |
-| **Security Auditor** | OWASP Top 10, vulnerability scanning |
-| **Performance Auditor** | Profiling, optimization, load testing |
-| **Accessibility Specialist** | WCAG compliance, inclusive design |
-| **E2E Tester** | Playwright, Cypress, browser testing |
-
----
-
-## Quick Start
-
-### Planning + Implementation (Recommended)
-
-```bash
-# Plan a new feature (interview → research → PRD → tasks → sprints)
-/devteam:plan --feature "Add user authentication with OAuth"
-
-# Execute the plan
-/devteam:implement
-
-# Or execute specific sprint
-/devteam:implement --sprint 1
+```
+.devteam/plans/plan-20260614-143022-a3f9/
+├── analysis.md           # Выход Этапа 1
+├── stage2.merge.md       # Этап 2: проверка пересечений + верификация сборки
+└── checkpoints/          # checkpoint-файлы (автосохранение)
 ```
 
-The system will:
-1. **Interview** - Clarify requirements with targeted questions
-2. **Research** - Analyze codebase, identify patterns and blockers
-3. **Plan** - Generate PRD, tasks, and sprints
-4. **Execute** - Run with Task Loop quality loop and model escalation
-5. **Verify** - Pass all quality gates before completion
-
-### Bug Fixing
+### Просмотр состояния
 
 ```bash
-# Fix a local bug (interview → diagnose → fix → verify)
-/devteam:bug "Login fails for guest users"
-
-# Fix a GitHub issue
-/devteam:issue 123
-
-# Force Bug Council for complex issues
-/devteam:bug "Memory leak in image processor" --council
-```
-
-### Cost-Optimized Mode
-
-```bash
-# Use eco mode (lower-cost models for simpler tasks)
-/devteam:implement --eco
-/devteam:bug "Minor CSS issue" --eco
-```
-
-### Monitoring
-
-```bash
-# Check status, costs, progress
+# Текущая сессия
 /devteam:status
 
-# List plans and tasks
+# Все планы
 /devteam:list
 
-# Reset stuck sessions
-/devteam:reset
+# Execution logs
+/devteam:logs
+
+# Логи конкретной сессии
+/devteam:logs --session session-20260614-143022-a3f9
 ```
 
----
+### Сброс состояния
 
-## Configuration
-
-### Task Loop Configuration (`.devteam/task-loop-config.yaml`)
-
-```yaml
-loop_settings:
-  max_iterations: 10
-
-model_escalation:
-  enabled: true
-  consecutive_failures:
-    haiku_to_sonnet: 2
-    sonnet_to_opus: 2
-    opus_max_failures: 3  # Then Bug Council
-
-quality_gates:
-  required:
-    tests_passing: true
-    type_check: true
-    lint: true
-  security:
-    on_finding: create_fix_task
-```
-
-### Scope Definition (per task)
-
-```yaml
-# In task definition
-scope:
-  allowed_files:
-    - "src/auth/*.py"
-  allowed_patterns:
-    - "tests/auth/**/*.py"
-  forbidden_directories:
-    - "src/billing/"
-    - "src/admin/"
-  max_files_changed: 10
-```
-
-### Agent Selection (`.devteam/agent-capabilities.yaml`)
-
-```yaml
-categories:
-  security:
-    agents:
-      - id: penetration_tester
-        triggers:
-          keywords: [pentest, security testing, vulnerability]
-          task_types: [security_testing]
-```
-
----
-
-## Hooks System
-
-The system uses Claude Code hooks for autonomous execution. **All hooks support both Linux/macOS (Bash) and Windows (PowerShell).**
-
-| Hook | Linux/macOS | Windows | Purpose |
-|------|-------------|---------|---------|
-| Stop Hook | `stop-hook.sh` | `stop-hook.ps1` | Blocks exit without `EXIT_SIGNAL: true` |
-| Persistence Hook | `persistence-hook.sh` | `persistence-hook.ps1` | Detects and prevents abandonment |
-| Scope Check | `scope-check.sh` | `scope-check.ps1` | Validates commits stay in scope |
-| Pre-Compact | `pre-compact.sh` | `pre-compact.ps1` | Preserves state before context compaction |
-| Pre-Tool-Use | `pre-tool-use-hook.sh` | `pre-tool-use-hook.ps1` | Pre-execution validation |
-| Post-Tool-Use | `post-tool-use-hook.sh` | `post-tool-use-hook.ps1` | Post-execution logging |
-| Session Start | `session-start.sh` | `session-start.ps1` | Session initialization |
-| Session End | `session-end.sh` | `session-end.ps1` | Session cleanup |
-| Install | `install.sh` | `install.ps1` | Hook installation script |
-
-When installed via the marketplace or as a plugin, all hooks are configured automatically through `hooks/hooks.json`. No manual settings.json editing is required.
-
-See [hooks/README.md](hooks/README.md) for hook details and troubleshooting.
-
----
-
-## Model Tiers & Cost Optimization
-
-### Automatic Model Selection
-
-| Complexity | Model | Characteristics | Use Case |
-|------------|-------|------------------|----------|
-| 1-4 | Haiku | Fast, lowest cost | Simple fixes, docs |
-| 5-8 | Sonnet | Balanced | Standard features |
-| 9-14 | Opus | Most capable, highest cost | Complex architecture |
-
-### Escalation Flow
-
-```
-Task starts at complexity-appropriate tier
-           │
-           ▼
-       Attempt #1
-           │
-       FAIL? ──────────────────┐
-           │                   │
-           ▼                   ▼
-       Attempt #2          Same tier
-           │              + more context
-       FAIL? ──────────────────┐
-           │                   │
-           ▼                   ▼
-       Attempt #3          Same tier
-           │              + alt approach
-       FAIL? ──────────────────┐
-           │                   │
-           ▼                   ▼
-       ESCALATE           Upgrade tier
-           │              (haiku→sonnet→opus)
-           ▼
-    Continue with higher tier
-```
-
----
-
-## Architecture
-
-### Complete Flow
-
-```
-User Request
-     │
-     ▼
-┌─────────────────┐
-│  /devteam:implement  │ ← Automatic agent selection
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│   Task Loop     │ ← Iterative quality loop per task
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│   TASK LOOP     │ ← Quality loop wrapper
-│  ┌───────────┐  │
-│  │  Execute  │  │ ← Selected agents work
-│  │  Agents   │  │
-│  └─────┬─────┘  │
-│        │        │
-│        ▼        │
-│  ┌───────────┐  │
-│  │  Quality  │  │ ← Tests, lint, security
-│  │   Gates   │  │
-│  └─────┬─────┘  │
-│        │        │
-│    PASS│ FAIL   │
-│        │   │    │
-│        │   ▼    │
-│        │ ┌────┐ │
-│        │ │Fix │ │ ← Create fix tasks
-│        │ └──┬─┘ │
-│        │    │   │
-│        │    ▼   │
-│        │ Escalate? → Model upgrade if needed
-│        │    │   │
-│        └────┴───┘
-│             │
-└─────────────┘
-         │
-         ▼
-   EXIT_SIGNAL: true
-```
-
-### Directory Structure
-
-```
-.devteam/
-├── config.yaml              # Main project configuration
-├── task-loop-config.yaml    # Task Loop quality loop config
-├── agent-capabilities.yaml  # Agent registry with triggers
-├── agent-selection.md       # Selection algorithm docs
-├── persistence-config.yaml  # Anti-abandonment rules
-├── scope-enforcement.md     # Scope system docs
-├── model-selection.md       # Dynamic model assignment
-├── parallel-execution.md    # Concurrent task handling
-├── plan-management.md       # Plan lifecycle tracking
-├── sprint-loop-config.yaml  # Sprint validation settings
-├── task-loop-config.yaml    # Task execution settings
-├── code-review-config.yaml  # Code review standards
-├── database-config.yaml     # Database setup
-├── frontend-config.yaml     # Frontend-specific settings
-├── performance-config.yaml  # Performance audit thresholds
-├── test-config.yaml         # Test framework configuration
-├── testing-config.yaml      # Test execution config
-├── ux-config.yaml           # UX validation rules
-├── validation-config.yaml   # Requirements validation rules
-├── refactoring-config.yaml  # Refactoring guidelines
-├── devteam.db               # SQLite execution state + circuit breaker tracking (runtime)
-└── plans/                   # Multi-plan storage (runtime)
-
-agents/
-├── orchestration/           # 11 orchestration agents
-│   ├── autonomous-controller.md
-│   ├── bug-council-orchestrator.md
-│   ├── code-review-coordinator.md
-│   ├── quality-gate-enforcer.md
-│   ├── requirements-validator.md
-│   ├── scope-validator.md
-│   ├── sprint-loop.md
-│   ├── sprint-orchestrator.md
-│   ├── task-loop.md
-│   ├── track-merger.md
-│   └── workflow-compliance.md
-├── planning/                # PRD & sprint planning (3)
-├── research/                # Codebase research (1)
-├── diagnosis/               # Bug Council agents (5)
-├── backend/                 # Backend API developers (16)
-├── frontend/                # Frontend developers (3)
-├── database/                # Database specialists (12)
-├── quality/                 # Testing & QA (26)
-├── devops/                  # CI/CD, Docker, K8s (5)
-├── mobile/                  # iOS, Android, Flutter, RN (8)
-├── security/                # Security & Compliance (10)
-├── sre/                     # Site Reliability Engineering (2)
-├── ux/                      # Design system agents (12)
-├── accessibility/           # A11y specialists (2)
-├── architecture/            # System architecture (1)
-├── data-ai/                 # Data & ML engineering (2)
-├── devrel/                  # Developer advocacy (1)
-├── product/                 # Product management (1)
-├── specialized/             # Observability (1)
-├── support/                 # Dependency management (1)
-├── infrastructure/          # Configuration management (1)
-├── python/                  # Python utilities (1)
-├── scripting/               # Shell & PowerShell (2)
-└── templates/
-    └── base-agent.md
-
-commands/                    # 20 slash commands
-├── devteam-plan.md
-├── devteam-implement.md
-├── devteam-bug.md
-├── devteam-issue.md
-├── devteam-issue-new.md
-├── devteam-status.md
-├── devteam-reset.md
-├── devteam-config.md
-├── devteam-logs.md
-├── devteam-help.md
-├── devteam-list.md
-├── devteam-select.md
-├── devteam-design.md
-├── devteam-design-drift.md
-├── devteam-review.md
-├── devteam-test.md
-├── merge-tracks.md
-├── worktree-status.md
-├── worktree-list.md
-└── worktree-cleanup.md
-
-skills/                      # 20 skill definitions (SKILL.md per directory)
-├── devteam-plan/
-├── devteam-implement/
-├── devteam-bug/
-├── ... (one directory per command)
-└── worktree-cleanup/
-
-.claude/
-└── rules/                   # 11 path-specific rule files
-    └── *.md
-
-agent-registry.json          # Agent and command registry (127 agents, 20 commands)
-settings.json                # Plugin default settings
-.mcp.json                    # Bundled MCP server configs (GitHub, Memory)
-.lsp.json                    # Language server configs (8 languages)
-
-hooks/                       # Cross-platform hooks
-├── stop-hook.sh / .ps1      # Exit control
-├── persistence-hook.sh / .ps1
-├── scope-check.sh / .ps1
-├── pre-compact.sh / .ps1
-├── pre-tool-use-hook.sh / .ps1
-├── post-tool-use-hook.sh / .ps1
-├── session-start.sh / .ps1
-├── session-end.sh / .ps1
-├── install.sh / .ps1
-├── lib/                     # Shared hook utilities
-├── tests/                   # Hook test suite
-└── README.md
-
-mcp-configs/                 # MCP server configurations
-├── required.json
-├── recommended.json
-├── optional.json
-├── lsp-servers.json
-└── README.md
-```
-
----
-
-## Commands Reference
-
-### Core Commands
-
-| Command | Description |
-|---------|-------------|
-| `/devteam:plan` | Interactive planning with interview, research, and sprint generation |
-| `/devteam:implement` | Execute plans, sprints, tasks, or ad-hoc work |
-| `/devteam:bug "<desc>"` | Fix bugs with diagnostic workflow and Bug Council |
-| `/devteam:issue <#>` | Fix GitHub issues with interview if needed |
-| `/devteam:status` | Display system health, progress, and costs |
-| `/devteam:reset` | Reset stuck sessions and recover from errors |
-
-### Planning Options
+Если сессия зависла (например, Stop hook заблокировал выход без
+`EXIT_SIGNAL: true`):
 
 ```bash
-/devteam:plan                      # Interactive planning
-/devteam:plan --feature "desc"     # Plan specific feature
-/devteam:plan --from spec.md       # Plan from spec file
-/devteam:plan --skip-research      # Skip research phase
+/devteam:reset                # текущая сессия
+/devteam:reset --all          # все зависшие сессии
+/devteam:reset --circuit      # только circuit breaker
 ```
 
-### Implementation Options
+### Backup
+
+`.devteam/devteam.db` — это один SQLite-файл. Для backup:
 
 ```bash
-/devteam:implement                 # Execute current plan
-/devteam:implement --sprint 1      # Execute specific sprint
-/devteam:implement --all           # Execute all sprints
-/devteam:implement --task TASK-001 # Execute specific task
-/devteam:implement "ad-hoc task"   # One-off task with interview
-/devteam:implement --eco           # Cost-optimized mode
-```
-
-### Bug Fixing Options
-
-```bash
-/devteam:bug "description"         # Fix with interview
-/devteam:bug "desc" --council      # Force Bug Council
-/devteam:bug "desc" --severity critical
-/devteam:bug "desc" --eco          # Cost-optimized
-```
-
-### Quality & Review Commands
-
-| Command | Description |
-|---------|-------------|
-| `/devteam:review` | Run cross-agent code review |
-| `/devteam:test` | Run test coordination and execution |
-| `/devteam:design` | Design system generation and validation |
-| `/devteam:design-drift` | Detect design system drift |
-
-### Management Commands
-
-| Command | Description |
-|---------|-------------|
-| `/devteam:list` | List plans, sprints, and tasks |
-| `/devteam:select <plan>` | Select active plan |
-| `/devteam:issue-new "<desc>"` | Create new GitHub issue |
-| `/devteam:config` | View and modify configuration |
-| `/devteam:logs` | View execution logs |
-| `/devteam:help` | Get help on any topic |
-
-### Worktree Commands
-
-| Command | Description |
-|---------|-------------|
-| `/devteam:worktree-status` | Show worktree status |
-| `/devteam:worktree-list` | List all worktrees |
-| `/devteam:worktree-cleanup` | Clean up worktrees |
-| `/devteam:merge-tracks` | Merge parallel tracks |
-
-See [commands/README.md](commands/README.md) for detailed documentation.
-
----
-
-## Quality Standards
-
-Every task must pass:
-
-| Gate | Requirement |
-|------|-------------|
-| **Tests** | 100% of tests passing |
-| **Types** | No type errors (mypy, tsc) |
-| **Lint** | No lint errors |
-| **Security** | No high/critical findings |
-| **Coverage** | ≥80% code coverage |
-| **Scope** | All changes within scope |
-
-**No task completes without all gates passing.**
-
----
-
-## Examples
-
-### Example 1: Add Feature
-
-```bash
-/devteam:implement "Add user profile page with avatar upload"
-```
-
-System automatically:
-1. Detects React frontend + FastAPI backend
-2. Selects: frontend_developer, api_developer_python, test_writer
-3. Creates scoped subtasks for each
-4. Executes with Task Loop
-5. Security audit on file upload
-6. Completes when all tests pass
-
-### Example 2: Fix Bug
-
-```bash
-/devteam:implement "Fix: Users can't login after password reset"
-```
-
-System automatically:
-1. Detects bug-type task
-2. Assigns root_cause_analyst first
-3. If initial fix fails, activates Bug Council
-4. 5 perspectives analyze the issue
-5. Synthesized solution implemented
-6. Regression tests added
-
-### Example 3: Security Audit
-
-```bash
-/devteam:implement "Audit authentication system"
-```
-
-System automatically:
-1. Selects: security_auditor, penetration_tester, compliance_engineer
-2. Runs OWASP Top 10 checks
-3. Creates fix tasks for findings
-4. Verifies fixes
-5. Generates compliance report
-
----
-
-## Installation
-
-### Install from Claude Code Marketplace (Recommended)
-
-The easiest way to install DevTeam is directly from within Claude Code:
-
-```bash
-# 1. Add the DevTeam marketplace
-/plugin marketplace add https://github.com/michael-harris/devteam
-
-# 2. Install the plugin
-/plugin install devteam@devteam-marketplace
-
-# 3. Verify installation
-/devteam:status
-```
-
-That's it. The database is auto-initialized on first use. Hooks, agents, skills, and rules are all configured automatically.
-
-### Install from Local Clone (Development)
-
-For contributing or local development:
-
-```bash
-# 1. Clone the repository
-git clone https://github.com/michael-harris/devteam.git
-
-# 2. Install as a local plugin
-/plugin install /path/to/devteam
-
-# 3. Verify installation
-/devteam:status
-```
-
-### Prerequisites
-
-- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code)
-- SQLite3
-- Bash 4.0+ (Linux/macOS) or PowerShell 5.1+ (Windows)
-- Git
-
-### Environment Variable (Agent Teams)
-
-To enable Agent Teams (parallel multi-agent execution), set this environment variable before starting Claude Code:
-
-```bash
-export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
+cp .devteam/devteam.db .devteam/devteam.db.backup-$(date +%Y%m%d)
 ```
 
 ---
 
-## FAQ
+## 9. Troubleshooting
 
-**Q: What stops agents from giving up?**
+### Skills/команды не появляются после установки
 
-A: The persistence system detects "give up" language and blocks it, forcing continued effort with escalating re-engagement prompts, model upgrades, and Bug Council activation.
+**Симптом**: `/skills` не показывает скилы devteam; `/devteam:status`
+неизвестна.
 
-**Q: How does model escalation work?**
+**Решение**:
+1. Перезапустите Qwen Code (настройки применяются при перезапуске)
+2. Проверьте install: `cat ~/.qwen/settings.json | grep -A 5 devteam`
+3. Проверьте sentinel: `ls -la ~/.qwen/.devteam-installed`
+4. Перезапустите install: `bash install.sh`
 
-A: After 2 consecutive failures at a tier, the model upgrades (haiku→sonnet→opus). After 3 opus failures, Bug Council activates.
+### Хуки не срабатывают
 
-**Q: Can agents modify files outside their scope?**
+**Симптом**: scope-проверки, persistence, stop-hook не работают.
 
-A: No. The scope validator has VETO power and blocks all out-of-scope changes. Agents log observations for out-of-scope issues instead.
+**Решение**:
+1. Проверьте, что в `~/.qwen/settings.json` (или
+   `.qwen/settings.json` при `--scope=project`) есть ключ `hooks`
+2. Проверьте, что sentinel-файл существует:
+   `ls ~/.qwen/.devteam-installed`
+3. Перезапустите install: `bash install.sh`
+4. Запустите с debug: `qwen --debug` (показывает вызовы хуков)
 
-**Q: What triggers the Bug Council?**
+### Stop hook блокирует штатный выход
 
-A: Critical bugs, 3+ failed opus attempts, complexity ≥10, or explicit flag.
+**Симптом**: не можете завершить сессию Qwen Code; модель
+продолжает работать.
 
-**Q: How do I customize agent selection?**
+**Решение**: убедитесь, что ваше последнее сообщение ассистента
+содержит:
 
-A: Edit `.devteam/agent-capabilities.yaml` to add triggers, keywords, and file patterns.
+```text
+TASK_COMPLETE: <id>
+EXIT_SIGNAL: true
+```
 
----
+Если модель не выдаёт это, вы можете:
 
-## Contributing
+1. Вручную напечатать "EXIT_SIGNAL: true" и завершить turn
+2. Или запустите `/devteam:reset` для очистки зависшего
+   состояния сессии
+3. Затем начните новую сессию
 
-Contributions welcome! Areas of interest:
-- Additional language support
-- New enterprise agent roles
-- Improved selection algorithms
-- Integration with more tools
+### Этап пайплайна упал
 
----
+**Симптом**: этап остановлен с отчётом `STAGE N FAILED`.
 
-## Credits & Acknowledgments
+**Решение**:
+1. Прочитайте failure-отчёт: он идентифицирует упавших агентов и
+   успешных
+2. Выход успешных агентов сохранён в working tree
+3. Перезапустите с `--simulate-fail-stage=<name>` чтобы увидеть
+   формат отчёта
+4. Исправьте проблему вручную или уточните `--feature` и
+   перезапустите
+5. После max retries (`pipeline.retry.per_agent`) этап
+   останавливается
 
-This project draws inspiration from and builds upon several pioneering projects in the AI-assisted development space.
+### Coverage gate не пройден
 
-### Direct Inspirations (Claude Code Ecosystem)
+**Симптом**: Этап 3 остановлен с "coverage < 80%".
 
-These projects directly influenced our design and implementation:
+**Решение**:
+1. Понизьте порог (например, `--pipeline.coverage.threshold=70` или
+   `pipeline.coverage.threshold: 70` в config)
+2. Или добавьте тестов вручную и перезапустите
+3. Или пропустите Этап 3 совсем: `--skip-stage testing`
 
-| Project | What We Learned | Link |
-|---------|-----------------|------|
-| **ralph-claude-code** | The Ralph autonomous loop concept, EXIT_SIGNAL pattern, circuit breaker for stagnation detection, dual-condition exit gates, `.ralph/` directory structure pattern | [github.com/frankbria/ralph-claude-code](https://github.com/frankbria/ralph-claude-code) |
-| **everything-claude-code** | Specialized agent delegation pattern, cross-platform hook architecture, subagent orchestration strategies, skill/agent separation | [github.com/affaan-m/everything-claude-code](https://github.com/affaan-m/everything-claude-code) |
-| **awesome-claude-skills** | Skill organization patterns, YAML frontmatter structure, category-based skill taxonomy | [github.com/ComposioHQ/awesome-claude-skills](https://github.com/ComposioHQ/awesome-claude-skills) |
-| **wshobson/agents** | Tiered model assignment (Opus/Sonnet/Haiku), plugin architecture patterns, token efficiency strategies, 72-plugin modular design | [github.com/wshobson/agents](https://github.com/wshobson/agents) |
-| **ui-ux-pro-max-skill** | Design system generation patterns, industry-specific rule sets, Master+Overrides architecture concept | [github.com/nextlevelbuilder/ui-ux-pro-max-skill](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) |
+### Ошибки GitHub MCP
 
-### What We Built Upon (Our Additions)
+**Симптом**: `/devteam:issue` падает с "github MCP not available".
 
-While inspired by these projects, we developed original implementations:
+**Решение**:
+1. Установите `GITHUB_TOKEN`: `export GITHUB_TOKEN=<token>`
+2. Установите Node.js (для `npx`): `brew install node` (macOS) или
+   `apt install nodejs` (Linux)
+3. Проверьте: `which npx && echo $GITHUB_TOKEN`
 
-| Feature | Inspiration Source | Our Original Addition |
-|---------|-------------------|----------------------|
-| **Task Loop** | ralph-claude-code's autonomous loop | Added model escalation (haiku→sonnet→opus), Bug Council activation, quality gates integration |
-| **Model Escalation** | wshobson/agents tier concept | Automatic escalation after consecutive failures, complexity-based initial selection, de-escalation after success |
-| **Bug Council** | Original concept | 5-agent multi-perspective debugging system with synthesized solutions |
-| **Scope Enforcement** | Original concept | 6-layer enforcement with VETO power, out-of-scope observations logging |
-| **Anti-Abandonment** | Original concept | Persistence hooks detecting "give up" patterns, escalating re-engagement prompts |
-| **Agent Selection** | everything-claude-code delegation | Task-aware agent selection based on keywords, file types, task type, and language |
-| **Enterprise Agents** | wshobson/agents categories | SRE, Platform Engineer, Compliance Engineer, Penetration Tester, and 8 other enterprise roles |
+### Ошибки валидации `--skip-stage`
 
-### Broader Ecosystem Inspirations
+**Симптом**: "is not one of: analytics development testing" и т.д.
 
-| Project | Inspiration | Link |
-|---------|-------------|------|
-| **Aider** | Iterative code refinement and "linting loops" | [github.com/paul-gauthier/aider](https://github.com/paul-gauthier/aider) |
-| **AutoGPT** | Multi-agent orchestration patterns | [github.com/Significant-Gravitas/AutoGPT](https://github.com/Significant-Gravitas/AutoGPT) |
-| **MetaGPT** | Role-based agents, "committee of experts" | [github.com/geekan/MetaGPT](https://github.com/geekan/MetaGPT) |
-| **GPT-Engineer** | PRD-to-code workflows | [github.com/gpt-engineer-org/gpt-engineer](https://github.com/gpt-engineer-org/gpt-engineer) |
-| **Sweep AI** | Automated bug fixing patterns | [github.com/sweepai/sweep](https://github.com/sweepai/sweep) |
-| **OpenHands** | Agent-computer interfaces | [github.com/All-Hands-AI/OpenHands](https://github.com/All-Hands-AI/OpenHands) |
-| **SWE-agent** | Software engineering agent design | [github.com/princeton-nlp/SWE-agent](https://github.com/princeton-nlp/SWE-agent) |
-
-### Standards & Frameworks Referenced
-
-- **OWASP Top 10** - Security testing methodology
-- **WCAG 2.1** - Accessibility compliance standards
-- **SOC2/HIPAA/GDPR/PCI-DSS** - Compliance frameworks
-- **Google SRE** - Site Reliability Engineering practices
-- **The Twelve-Factor App** - Modern application design principles
-
-### Originality Statement
-
-All code in this repository was written from scratch. While we adopted concepts and patterns from the above projects (particularly the Ralph loop concept from frankbria/ralph-claude-code), our implementations are original:
-
-- Our hooks use different file structures (`.devteam/` vs `.ralph/`)
-- Our config uses YAML with model escalation (original uses INI without escalation)
-- Our agent definitions follow a different structure
-- Bug Council, scope enforcement, and anti-abandonment are entirely original systems
+**Решение**: валидные значения ровно `analytics`, `development`,
+`testing`. Проверьте опечатки. Поддерживается comma-separated и
+space-separated (в кавычках).
 
 ---
 
-## License
+## 10. FAQ
 
-MIT License - See LICENSE file.
+### Могу ли я использовать DevTeam с не-Kotlin проектами?
+
+Нет. DevTeam v6.0 ориентирован на Kotlin + Spring. Сабагенты и
+скилы специфичны для этого стека. Для других языков используйте
+нативные возможности модели или соберите своё расширение.
+
+### Могу ли я добавлять собственные сабагенты?
+
+Да. См. `CONTRIBUTING.md` для шаблона. Добавьте `agents/<name>.md` с
+правильным frontmatter и перезапустите Qwen Code.
+
+### Могу ли я добавлять собственные скилы?
+
+Да. Создайте `skills/<name>/SKILL.md` с правильным frontmatter
+(`name`, `description`, опц. `priority`). Скил становится
+модель-инвокабельным автоматически.
+
+### Как обновить upstream Kotlin скилы?
+
+```bash
+cd vendors/kotlin-backend-agent-skills
+git pull origin main
+cd ../..
+bash scripts/sync-kotlin-skills.sh
+# Restart Qwen Code
+```
+
+### В чём разница между `--dry-run` и реальным запуском?
+
+`--dry-run` печатает запланированную dispatch-последовательность
+без вызова каких-либо агентов. Никакие файлы не создаются, никакой
+код не меняется, никакие тесты не запускаются. Полезно для
+верификации и понимания структуры пайплайна.
+
+Реальный запуск вызывает каждого сабагента параллельно (один
+assistant turn на этап) и производит реальные результаты.
+
+### Как работает anti-abandonment?
+
+Три механизма:
+1. **Persistence hook** на `Notification: idle_prompt` —
+   переподключает модель, если она застряла
+2. **Stop hook** — блокирует выход сессии без `EXIT_SIGNAL: true`
+3. **Текстовый контракт** в `QWEN.md` — явный запрет фраз вроде
+   "I cannot", "I'm unable to", "you should try manually"
+
+В комбинации: модель не может сдаться. Если застряла — ретраит
+или эскалирует на Bug Council.
+
+### Что если я не согласен с решениями оркестратора?
+
+Пайплайн — это инструмент, а не мандат. Вы можете:
+- Откатить код через `git restore <file>` и перезапустить с
+  уточнённым `--feature`
+- Пропустить этапы с плохим выходом: `--skip-stage development`
+- Добавить ручные правки между этапами
+- Отредактировать `analysis.md` перед запуском Этапа 2
+  (dev-оркестратор читает его)
+
+### Сколько стоит каждый запуск пайплайна?
+
+Зависит от модельного tier. Qwen Code выбирает tier. Примерно:
+- Этап 1: 3-4 агента × ~2-5k токенов каждый = ~10-20k токенов
+- Этап 2: 4 агента × ~10-50k токенов (написание кода) = ~40-200k токенов
+- Этап 3: 3 агента × ~10-30k токенов каждый (написание тестов) = ~30-90k токенов
+- Quality gates: минимум (запуск существующих инструментов)
+
+Итого: ~80-300k токенов на запуск. Cost tracking в `/devteam:status`.
+
+### Где хранится состояние проекта?
+
+В `.devteam/` в корне вашего проекта:
+- `devteam.db` — SQLite-база данных
+- `plans/<plan-id>/` — артефакты конкретного запуска
+- `checkpoints/` — автоматически сохранённые checkpoints
+- `logs/` — execution logs
+
+Эта директория в `.gitignore`.
+
+### Как удалить расширение?
+
+```bash
+bash uninstall.sh                          # убрать хуки из settings.json
+qwen extensions uninstall devteam         # убрать расширение
+rm -rf .devteam                            # убрать runtime state
+```
+
+Или, чтобы оставить расширение, но убрать только хуки:
+
+```bash
+bash uninstall.sh
+```
 
 ---
 
-**Built for Claude Code**
+## 11. Глоссарий
+
+| Термин | Определение |
+|---|---|
+| **Subagent** (сабагент) | Специализированный AI, вызываемый через `agent({ subagent_type: "..." })`. Имеет свой контекст и инструменты. |
+| **Skill** (скил) | Markdown-инструкция, которую модель активирует по совпадению описания. Лежит в `skills/<name>/SKILL.md`. |
+| **Slash command** | User-invoked точка входа. `/devteam:build` читает `commands/devteam/build.md`. |
+| **Stage** (этап) | Мажорная фаза пайплайна (Analytics, Development, Testing). Последовательная. |
+| **Parallel** | Внутри этапа сабагенты запускаются в одном assistant turn. Истинный параллелизм. |
+| **File partition** | Непересекающийся набор файловых паттернов, принадлежащий одному сабагенту Этапа 2. |
+| **Predicate** | Булева функция, вычисляемая до dispatch этапа (например, `is_hybrid_predicate`). |
+| **Quality gate** | Проверка (tests, ktlint, detekt, kover) на границе этапа. |
+| **`--dry-run`** | Напечатать dispatch-последовательность без вызова агентов. |
+| **`--skip-stage`** | Пропустить один или несколько этапов (analytics/development/testing). |
+| **`EXIT_SIGNAL: true`** | Маркер в сообщении ассистента, разрешающий Stop hook выход. |
+| **Anti-abandonment** | Система, не дающая модели "сдаться". Три механизма: persistence hook, stop hook, текстовый контракт. |
+| **Bug Council** | 5-агентная параллельная диагностическая команда для сложных багов. |
+| **Hybrid-проект** | Есть история `.git/` ИЛИ существующие Kotlin-исходники. Триггерит `code-archaeologist`. |
+| **Sentinel-файл** | `~/.qwen/.devteam-installed` — файловое состояние установки. |
+
+---
+
+## Нужна дополнительная помощь?
+
+- **Архитектура**: см. `arch.md` (English, comprehensive)
+- **Миграция с v5.0.0 (Claude Code plugin)**: см.
+  `docs/MIGRATION_FROM_CLAUDE.md`
+- **Для контрибьюторов**: см. `CONTRIBUTING.md`
+- **GitHub issues**: https://github.com/michael-harris/devteam/issues
+- **Документация Qwen Code**: https://qwen-code.dev/docs
+
+---
+
+**Удачной Kotlin + Spring разработки!** 🚀

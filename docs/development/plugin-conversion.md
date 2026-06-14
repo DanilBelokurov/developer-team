@@ -424,8 +424,8 @@ Use the template above, ensuring:
 ## Installation
 
 \`\`\`bash
-/plugin marketplace add https://github.com/yourusername/devteam
-/plugin install devteam
+qwen extensions install https://github.com/yourusername/devteam
+qwen extensions install devteam
 \`\`\`
 
 ## Usage
@@ -458,8 +458,8 @@ Copy `.claude/commands/*.md` to `commands/` in the plugin repository.
 
 ```bash
 # In the project that needs the agents:
-/plugin marketplace add file:///path/to/devteam
-/plugin install devteam
+qwen extensions install file:///path/to/devteam
+qwen extensions install devteam
 ```
 
 ### Step 7: Publish (Optional)

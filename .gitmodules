@@ -1,0 +1,3 @@
+[submodule "vendors/kotlin-backend-agent-skills"]
+	path = vendors/kotlin-backend-agent-skills
+	url = https://github.com/yalishevant/kotlin-backend-agent-skills

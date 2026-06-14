@@ -10,10 +10,10 @@ The easiest way to install DevTeam is directly from within Claude Code:
 
 ```bash
 # Add the DevTeam marketplace
-/plugin marketplace add https://github.com/michael-harris/devteam
+qwen extensions install https://github.com/michael-harris/devteam
 
 # Install the plugin
-/plugin install devteam@devteam-marketplace
+qwen extensions install devteam@devteam-marketplace
 ```
 
 All hooks, agents, skills, and rules are configured automatically. The SQLite database (`.devteam/devteam.db`) is auto-initialized on first use — no manual setup required.
@@ -24,7 +24,7 @@ For development or contributing:
 
 ```bash
 git clone https://github.com/michael-harris/devteam.git
-/plugin install /path/to/devteam
+qwen extensions install /path/to/devteam
 ```
 
 ### 2. Verify Installation

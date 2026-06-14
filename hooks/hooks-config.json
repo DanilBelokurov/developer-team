@@ -1,0 +1,106 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$QWEN_PROJECT_DIR/hooks/run-hook.sh pre-tool-use-hook",
+            "description": "Scope check + circuit-breaker warning + iteration context"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$QWEN_PROJECT_DIR/hooks/run-hook.sh pre-tool-use-hook",
+            "description": "Dangerous-command block + iteration context"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$QWEN_PROJECT_DIR/hooks/run-hook.sh post-tool-use-hook",
+            "description": "Track file modifications in session state"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$QWEN_PROJECT_DIR/hooks/run-hook.sh post-tool-use-hook",
+            "description": "Detect quality-gate results from bash output"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$QWEN_PROJECT_DIR/hooks/run-hook.sh stop-hook",
+            "description": "Block exit unless EXIT_SIGNAL:true (autonomous mode)"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "manual|auto",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$QWEN_PROJECT_DIR/hooks/run-hook.sh pre-compact",
+            "description": "Save state to SQLite before context compaction"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$QWEN_PROJECT_DIR/hooks/run-hook.sh session-start",
+            "description": "Initialize or resume session in SQLite"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$QWEN_PROJECT_DIR/hooks/run-hook.sh session-end",
+            "description": "Finalize session, calculate costs"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "idle_prompt",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$QWEN_PROJECT_DIR/hooks/run-hook.sh persistence-hook",
+            "description": "Detect and prevent abandonment during autonomous execution"
+          }
+        ]
+      }
+    ]
+  }
+}
