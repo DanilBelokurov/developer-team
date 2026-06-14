@@ -1,12 +1,13 @@
 #!/bin/bash
 # dry-run.sh — Shell mirror of the /devteam:build pipeline-orchestrator.
 # Prints the planned agent dispatch sequence without invoking agents.
-# Used for V5/V5b/V6/V6b/V7/V8/V9/V9b verifications.
+# Used for V5/V5b/V6/V6b/V7/V8/V9/V9b/V11 verifications.
 #
 # Usage:
 #   scripts/dry-run.sh --feature "Add OAuth" [--skip-stage X,Y]
 #                        [--pipeline.retry.per_agent=N]
 #                        [--simulate-fail-stage=NAME]
+#                        [--simulate-hitl-approve|reject|edit|abort]
 #
 # Stages: analytics | development | testing
 set -euo pipefail
@@ -15,6 +16,7 @@ FEATURE=""
 SKIP=()
 RETRY=2
 SIMULATE_FAIL=""
+HITL_ACTION=""  # empty | approve | reject | edit | abort
 
 # Argument parsing
 while [ $# -gt 0 ]; do
@@ -52,6 +54,10 @@ while [ $# -gt 0 ]; do
     --simulate-fail-stage=*)
       SIMULATE_FAIL="${1#*=}"
       shift;;
+    --simulate-hitl-approve) HITL_ACTION="approve"; shift;;
+    --simulate-hitl-reject)  HITL_ACTION="reject"; shift;;
+    --simulate-hitl-edit)    HITL_ACTION="edit"; shift;;
+    --simulate-hitl-abort)   HITL_ACTION="abort"; shift;;
     *) echo "ERROR: unknown argument: $1"; exit 2;;
   esac
 done
@@ -124,6 +130,73 @@ else
   [ "$HAS_SPEC" = "true" ] && echo "  -> agent(api-spec-reader, prompt=\"...$FEATURE...\")"
   echo "  -> set session_state: stage.analytics.status = \"completed\""
   echo ""
+fi
+
+# HITL gate (after Stage 1, before Stage 2)
+# Only fires if Stage 1 just completed (not skipped, not failed)
+# and Stage 2 is not skipped.
+HITL_FIRES=false
+if ! is_skipped analytics && [ "$SIMULATE_FAIL" != "analytics" ] && \
+   ! is_skipped development; then
+  HITL_FIRES=true
+fi
+
+if [ "$HITL_FIRES" = "true" ]; then
+  # Default HITL action is "approve" if user didn't specify
+  EFFECTIVE_HITL="${HITL_ACTION:-approve}"
+
+  echo "★ HITL GATE ★ (always-on for /devteam:build)"
+  echo "  analysis.md: .devteam/plans/<plan-id>/analysis.md"
+  echo "  ask_user_question:"
+  echo "    > Approve and continue to Stage 2"
+  echo "    > Request changes (re-run Stage 1)"
+  echo "    > Edit analysis.md manually, then continue"
+  echo "    > Abort pipeline"
+
+  case "$EFFECTIVE_HITL" in
+    approve)
+      echo "  --simulate-hitl-approve: USER CHOSE Approve"
+      echo "  -> set session_state: stage.development.status = \"pending\""
+      echo "  -> set session_state: stage.development.hitl_action = \"approve\""
+      echo "  -> set session_state: stage.development.hitl_resolved_at = \"<iso8601>\""
+      echo ""
+      ;;
+    edit)
+      echo "  --simulate-hitl-edit: USER CHOSE Edit manually, then continue"
+      echo "  -> set session_state: stage.development.status = \"pending\""
+      echo "  -> set session_state: stage.development.hitl_action = \"edit\""
+      echo "  -> set session_state: stage.development.hitl_resolved_at = \"<iso8601>\""
+      echo ""
+      ;;
+    reject)
+      echo "  --simulate-hitl-reject: USER CHOSE Request changes (re-run Stage 1)"
+      echo "  -> set session_state: stage.analytics.status = \"pending\"  (re-run Stage 1)"
+      echo "  -> set session_state: stage.development.hitl_action = \"request_changes\""
+      echo ""
+      echo "  (Re-running Stage 1...)"
+      echo "  -> agent(requirements-analyst, prompt=\"...$FEATURE... REFINED\")"
+      echo "  -> agent(db-schema-reader, prompt=\"...$FEATURE... REFINED\")"
+      [ "$HYBRID" = "true" ] && echo "  -> agent(code-archaeologist, prompt=\"...$FEATURE... REFINED\")"
+      [ "$HAS_SPEC" = "true" ] && echo "  -> agent(api-spec-reader, prompt=\"...$FEATURE... REFINED\")"
+      echo "  -> set session_state: stage.analytics.status = \"completed\""
+      echo ""
+      echo "  (Re-prompt HITL gate)"
+      echo "  --simulate-hitl-approve: USER CHOSE Approve (on re-prompt)"
+      echo "  -> set session_state: stage.development.status = \"pending\""
+      echo "  -> set session_state: stage.development.hitl_action = \"approve\""
+      echo ""
+      ;;
+    abort)
+      echo "  --simulate-hitl-abort: USER CHOSE Abort pipeline"
+      echo "  -> set session_state: pipeline.active = \"false\""
+      echo "  -> set session_state: stage.development.hitl_action = \"abort\""
+      echo ""
+      echo "PIPELINE ABORTED at HITL gate after Stage 1"
+      echo "Retry policy: per_agent=$RETRY, on_failure=halt_stage"
+      echo "EXIT_SIGNAL: false  (do NOT emit; pipeline halted at user request)"
+      exit 0
+      ;;
+  esac
 fi
 
 # Stage 2

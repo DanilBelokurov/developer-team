@@ -1,7 +1,7 @@
 #!/bin/bash
 # DevTeam Qwen Code extension installer.
 # Thin wrapper: delegates hook merging to lib/install-hooks.py and
-# database init to scripts/db-init.sh.
+# state init to scripts/state-init.sh (v6.2 — file-based state).
 set -euo pipefail
 
 PLUGIN_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -12,14 +12,13 @@ echo ""
 # 1. Core prerequisites
 MISSING=()
 command -v python3 >/dev/null 2>&1 || MISSING+=("python3")
-command -v sqlite3  >/dev/null 2>&1 || MISSING+=("sqlite3")
 command -v git      >/dev/null 2>&1 || MISSING+=("git")
 if [ ${#MISSING[@]} -gt 0 ]; then
   echo "ERROR: missing required tools: ${MISSING[*]}"
   exit 1
 fi
 PYTHON_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-echo "Core prerequisites OK (python${PYTHON_VERSION}, sqlite3, git)"
+echo "Core prerequisites OK (python${PYTHON_VERSION}, git)"
 
 # 2. MCP server prerequisites (warn-only — extension still loads without them)
 echo ""
@@ -45,10 +44,10 @@ SCOPE_FLAG="--scope=user"
 [ "${1:-}" = "--scope=project" ] && SCOPE_FLAG="--scope=project"
 python3 "$PLUGIN_DIR/lib/install-hooks.py" "$SCOPE_FLAG"
 
-# 4. Initialize database
+# 4. Initialize state (v6.2 — file-based, no SQLite)
 echo ""
-echo "Initializing database..."
-bash "$PLUGIN_DIR/scripts/db-init.sh"
+echo "Initializing state..."
+bash "$PLUGIN_DIR/scripts/state-init.sh"
 
 # 5. Done
 echo ""

@@ -136,12 +136,18 @@ Gate failures trigger per-agent retry up to
 `pipeline.retry.per_agent` times (default 2), then halt the stage
 with a structured failure report.
 
-## State and persistence
+## State and persistence (v6.2 — file-based)
 
-- Pipeline state: `.devteam/devteam.db` (SQLite, gitignored)
-- Plans: `.devteam/plans/<plan-id>/`
-- Stage tracking: `session_state` KV (no schema migration)
+- Pipeline state: `.devteam/state/` (Markdown files, gitignored)
+- Sessions: `.devteam/state/sessions/<id>.md` (YAML frontmatter)
+- KV state: `.devteam/state/kv/<key>` (one file per key)
+- Events: `.devteam/state/events/<date>-events.md` (append-only)
+- Plans: `.devteam/plans/<plan-id>/` (unchanged)
+- Stage tracking: `session_state` KV (stored as flat files)
 - Hooks: `~/.qwen/settings.json` (managed by `lib/install-hooks.py`)
+
+v6.1 used SQLite; v6.2 replaced with file-based state for zero
+external dependencies. See `scripts/state-structure.md` for full layout.
 
 The `Stop` hook blocks session exit until `TASK_COMPLETE: <id>` and
 `EXIT_SIGNAL: true` are emitted.

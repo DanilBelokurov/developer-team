@@ -298,16 +298,73 @@ No `model:` field (Qwen Code picks the model tier).
 | `scope-check.sh` | (helper) | — | Reused by pre-tool-use |
 | `run-hook.sh` (shim) | (all) | — | Maps Qwen Code stdin JSON → legacy env vars |
 
-### 4.6 State (`scripts/state.sh` + `.devteam/devteam.db`)
+### 4.5b Human-in-the-Loop (HITL) gate (NEW in v6.1)
 
-- Sessions table — one row per command invocation
-- `session_state` KV — arbitrary JSON values (used for stage tracking)
-- events — full log for debugging
-- tasks — atomic work units with acceptance criteria
-- gates — quality gate results
+After Stage 1 (Analytics) completes, the `pipeline-orchestrator` pauses
+and calls `ask_user_question` to obtain human approval before
+dispatching Stage 2 (Development). Always-on for `/devteam:build`.
 
-`schema.sql` is **NOT modified** for v6.0. Stage tracking uses
-existing `session_state` KV.
+**Four options presented to the user**:
+
+| Option | Effect on state |
+|---|---|
+| Approve and continue to Stage 2 | `stage.development.status = "pending"`, `hitl_action = "approve"` |
+| Request changes (re-run Stage 1) | `stage.analytics.status = "pending"` (re-run), `hitl_action = "request_changes"` |
+| Edit analysis.md manually, then continue | `stage.development.status = "pending"`, `hitl_action = "edit"` |
+| Abort pipeline | `pipeline.active = "false"`, `hitl_action = "abort"`, NO `EXIT_SIGNAL` |
+
+**State extension** (no schema migration; uses existing `session_state` KV):
+
+| Key | Type | Set by |
+|---|---|---|
+| `stage.development.status` | + `"awaiting_approval"` | pipeline-orchestrator |
+| `stage.development.hitl_paused_at` | ISO 8601 | pipeline-orchestrator (at pause) |
+| `stage.development.hitl_action` | `approve\|edit\|request_changes\|abort` | pipeline-orchestrator (after user choice) |
+| `stage.development.hitl_resolved_at` | ISO 8601 | pipeline-orchestrator (after user choice) |
+| `stage.development.analysis_path` | path | pipeline-orchestrator (at pause) |
+
+**Auto-skip HITL when**:
+- `--skip-stage development` is passed
+- `--skip-stage analytics,development` is passed
+- Stage 1 produced no analysis.md
+
+**Resume after Qwen Code restart**:
+- `hitl_action = approve | edit` → resume Stage 2
+- `hitl_action = request_changes` → re-run Stage 1
+- `hitl_action = abort` → manual intervention required
+
+**Verification** (V11 in `scripts/dry-run.sh`):
+- `--simulate-hitl-approve` prints "USER CHOSE Approve" + continues
+- `--simulate-hitl-reject` prints re-run + re-prompt
+- `--simulate-hitl-edit` prints edit + continues
+- `--simulate-hitl-abort` prints "PIPELINE ABORTED" with `EXIT_SIGNAL: false`
+
+See Section 5 (Pipeline) for the flow diagram with the HITL gate.
+
+### 4.6 State (`scripts/state.sh` + `.devteam/state/` — v6.2 file-based)
+
+- **Sessions** — `.devteam/state/sessions/<id>.md` (YAML frontmatter
+  + Markdown body). One file per session.
+- **session_state KV** — `.devteam/state/kv/<key>` (one file per key).
+  Values are plain text or JSON. Atomic writes via mkdir-lock.
+- **Events** — `.devteam/state/events/<date>-events.md` (append-only,
+  one file per day, never edited).
+- **Agent runs** — `.devteam/state/agent-runs/<run-id>.md` (per-invocation).
+- **Tasks** — `.devteam/state/tasks/<TASK-ID>.md` (per-task).
+- **Quality gates** — `.devteam/state/gates.md` (append-only).
+- **Circuit breaker** — `.devteam/state/circuit-breaker.md` (YAML).
+
+`schema.sql` (v6.1) was replaced by `state-structure.md` (v6.2) — pure
+documentation. No schema migration needed; new state files are
+created by `scripts/state-init.sh`.
+
+Stage tracking (including HITL state added in v6.1) uses the existing
+`session_state` KV pattern (now stored as flat files in
+`.devteam/state/kv/`).
+
+**Concurrency**: mkdir-based locking (POSIX-portable, no `flock`
+dependency). Each `set_kv_state()` / `atomic_write()` creates a sidecar
+`<file>.lock` directory; mkdir returns EEXIST if already locked.
 
 ### 4.7 Hook merger (`lib/install-hooks.py`)
 

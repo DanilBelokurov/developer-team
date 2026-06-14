@@ -33,6 +33,18 @@ pipeline:
   coverage:
     threshold: 80  # percent
 
+  # Human-in-the-Loop (HITL) gate (NEW in v6.1)
+  hitl:
+    enabled: true             # always-on for production safety
+    after_stage: development  # pause before this stage
+    pause_on: [analytics]     # alternative: trigger by stage completion
+    resume_actions:           # what the user can do at HITL
+      - approve              # continue to next stage
+      - request_changes      # re-run previous stage
+      - edit                 # manual edit of analysis.md, then continue
+      - abort                # halt pipeline
+    headless_fallback: approve  # default action in headless Qwen Code (no UI)
+
 # Per-stage sub-agent configuration
 stages:
   analytics:
