@@ -23,7 +23,6 @@ devteam/
 ├── skills/                  # Skill files (12)
 ├── agents/                  # Subagent definitions (18)
 ├── hooks/                   # Hook scripts (9 .sh + run-hook.sh shim)
-├── lib/install-hooks.py     # Python hook merger
 ├── scripts/                 # State, events, DB, schema
 ├── tests/                   # Test suite
 ├── examples/                # Usage examples
@@ -136,8 +135,6 @@ devteam/
 
 - Shell scripts: `set -euo pipefail`, `local` for function vars,
   snake_case functions, UPPER_SNAKE_CASE constants.
-- Python: PEP 8, type hints, stdlib-only (no external deps for
-  `lib/install-hooks.py`).
 - Markdown: clear imperative language, code fences for commands, no
   Claude Code references (use `$QWEN_PROJECT_DIR`, `qwen extensions …`).
 
@@ -145,7 +142,6 @@ devteam/
 
 ```bash
 bash tests/run-tests.sh                                  # existing shell tests
-python3 -c 'from lib.install_hooks import deep_merge_hooks; …'  # unit test
 bash install.sh                                          # twice — second is no-op
 ```
 

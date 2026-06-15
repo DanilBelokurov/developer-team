@@ -23,7 +23,7 @@ All notable changes to devteam are documented in this file.
   `set_kv_state` / `get_kv_state` unchanged
 - `commands/devteam/build.md` and other 16 commands — source
   `state.sh` unchanged
-- `lib/install-hooks.py` — hooks merge to `~/.qwen/settings.json`,
+- `install.sh` — hooks merge to `~/.qwen/settings.json` (shell + jq, no Python),
   doesn't depend on state storage
 - `scripts/dry-run.sh` — shell mirror, no state touches
 
@@ -98,11 +98,10 @@ power, no transactional semantics. For DevTeam's scale, negligible.
   `model`, `allowed-tools`, `user-invocable`, `argument-hint` removed.
 - **Slash commands**: `commands/<name>.md` (flat) → `commands/devteam/<name>.md`
   (grouped; invoked as `/devteam:name`).
-- **Hooks**: `hooks/hooks.json` (top-level) + `hooks/run-hook.js`
-  (cross-platform Node.js wrapper) → settings.json fragment
-  (`hooks/hooks-config.json`) merged by `lib/install-hooks.py` + new
-  `hooks/run-hook.sh` shim that converts Qwen Code's stdin JSON to the
-  env-var contract the existing 9 hook scripts expect.
+- **Hooks**: `hooks/hooks-config.json` (fragment) merged by `install.sh`
+  (shell + jq, no Python) + new `hooks/run-hook.sh` shim that converts
+  Qwen Code's stdin JSON to the env-var contract the existing 9 hook
+  scripts expect.
 - **Environment variables**: `CLAUDE_PLUGIN_ROOT` → `QWEN_PROJECT_DIR`.
   `scripts/state.sh` falls back through both, then to `git rev-parse`.
 - **Removed**: `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` (replaced by

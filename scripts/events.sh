@@ -1,157 +1,203 @@
 #!/bin/bash
-# DevTeam Event Logging Functions
+# DevTeam Event Logging Functions (v6.2 — file-based, no SQLite)
 # Provides secure event logging for DevTeam hooks and commands
-#
-# SECURITY: All SQL queries use proper escaping and input validation
-# ERROR HANDLING: Uses set -euo pipefail and validates all inputs
 #
 # Usage: source this file in hooks and commands
 #   source "$(dirname "$0")/../scripts/events.sh"
 
 set -euo pipefail
 
-# Get script directory and source state functions (which also sources common.sh)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/state.sh"
+source "${SCRIPT_DIR}/lib/common.sh"
+
+# ============================================================================
+# PATH CONSTANTS
+# ============================================================================
+
+ROOT="${ROOT:-$(pwd)}"
+STATE_DIR="${ROOT}/.devteam/state"
+EVENTS_DIR="${STATE_DIR}/events"
+GATES_DIR="${STATE_DIR}/gates.md"
+AGENT_RUNS_DIR="${STATE_DIR}/agent-runs"
 
 # ============================================================================
 # VALID EVENT TYPES AND CATEGORIES
 # ============================================================================
 
 readonly VALID_EVENT_TYPES=(
-    "session_started"
-    "session_ended"
-    "phase_changed"
-    "agent_started"
-    "agent_completed"
-    "agent_failed"
-    "model_escalated"
-    "model_deescalated"
-    "gate_passed"
-    "gate_failed"
-    "bug_council_activated"
-    "bug_council_completed"
-    "interview_started"
-    "interview_question"
-    "interview_completed"
-    "research_started"
-    "research_finding"
-    "research_completed"
-    "task_started"
-    "task_completed"
-    "task_failed"
-    "error_occurred"
-    "warning_issued"
-    "abandonment_detected"
-    "abandonment_prevented"
+    "session_started" "session_ended" "phase_changed"
+    "agent_started" "agent_completed" "agent_failed"
+    "model_escalated" "model_deescalated"
+    "gate_passed" "gate_failed"
+    "bug_council_activated" "bug_council_completed"
+    "interview_started" "interview_question" "interview_completed"
+    "research_started" "research_finding" "research_completed"
+    "task_started" "task_completed" "task_failed"
+    "error_occurred" "warning_issued"
+    "abandonment_detected" "abandonment_prevented"
 )
 
 readonly VALID_EVENT_CATEGORIES=(
-    "general"
-    "session"
-    "phase"
-    "agent"
-    "escalation"
-    "gate"
-    "bug_council"
-    "interview"
-    "research"
-    "task"
-    "error"
-    "warning"
-    "persistence"
+    "general" "session" "phase" "agent" "escalation"
+    "gate" "bug_council" "interview" "research" "task"
+    "error" "warning" "persistence"
 )
 
 # ============================================================================
 # VALIDATION HELPERS
 # ============================================================================
 
-# Validate event type
 validate_event_type() {
     local event_type="$1"
     if ! _in_array "$event_type" "${VALID_EVENT_TYPES[@]}"; then
-        log_warn "Unknown event type: $event_type (allowing anyway)" "events"
-    fi
-    return 0  # Allow unknown types but log warning
+        log_warn "Unknown event type: $event_type (allowing anyway)" "events"; fi
+    return 0
 }
 
-# Validate event category
 validate_event_category() {
     local category="$1"
     if ! _in_array "$category" "${VALID_EVENT_CATEGORIES[@]}"; then
-        log_warn "Unknown event category: $category (allowing anyway)" "events"
+        log_warn "Unknown event category: $category (allowing anyway)" "events"; fi
+    return 0
+}
+
+# ============================================================================
+# ATOMIC FILE HELPERS
+# ============================================================================
+
+_acquire_lock() {
+    local lockpath="$1"
+    local i=0
+    while ! mkdir "$lockpath" 2>/dev/null; do
+        i=$((i + 1))
+        if [ $i -gt 100 ]; then return 1; fi
+        sleep 0.01 2>/dev/null || true
+    done
+    return 0
+}
+
+_release_lock() {
+    rmdir "$1" 2>/dev/null || true
+}
+
+_atomic_append() {
+    local file="$1"
+    local content="$2"
+    local lockpath="${file}.lock"
+    mkdir -p "$(dirname "$file")"
+    if ! _acquire_lock "$lockpath"; then
+        printf '%s\n' "$content" >> "$file"
+        return 0
     fi
-    return 0  # Allow unknown categories but log warning
+    printf '%s\n' "$content" >> "$file"
+    _release_lock "$lockpath"
+}
+
+_atomic_write() {
+    local file="$1"
+    local content="$2"
+    local lockpath="${file}.lock"
+    mkdir -p "$(dirname "$file")"
+    if ! _acquire_lock "$lockpath"; then
+        printf '%s' "$content" > "$file"
+        return 0
+    fi
+    printf '%s' "$content" > "$file"
+    _release_lock "$lockpath"
+}
+
+# ============================================================================
+# SESSION ACCESSORS (delegated to state.sh)
+# ============================================================================
+
+get_current_session_id() {
+    if [[ ! -f "${STATE_DIR}/current-session.md" ]]; then echo ""; return; fi
+    local ref; ref=$(cat "${STATE_DIR}/current-session.md" 2>/dev/null)
+    [[ -z "$ref" ]] && return
+    [[ "$ref" == session/* ]] && echo "${ref#session/}" || echo ""
+}
+
+get_current_iteration() {
+    local session_id; session_id=$(get_current_session_id)
+    [[ -z "$session_id" ]] && echo "0" && return
+    local file="${STATE_DIR}/sessions/${session_id}.md"
+    if [[ ! -f "$file" ]]; then echo "0"; return; fi
+    awk '/^current_iteration:/ {sub(/^current_iteration: */,""); sub(/ *$/,""); print; exit}' "$file" 2>/dev/null || echo "0"
+}
+
+get_current_phase() {
+    local session_id; session_id=$(get_current_session_id)
+    [[ -z "$session_id" ]] && echo "" && return
+    local file="${STATE_DIR}/sessions/${session_id}.md"
+    if [[ ! -f "$file" ]]; then echo ""; return; fi
+    awk '/^current_phase:/ {sub(/^current_phase: */,""); sub(/ *$/,""); print; exit}' "$file" 2>/dev/null || echo ""
+}
+
+increment_failures() {
+    local session_id; session_id=$(get_current_session_id)
+    [[ -z "$session_id" ]] && return
+    local file="${STATE_DIR}/sessions/${session_id}.md"
+    if [[ ! -f "$file" ]]; then return; fi
+    local current; current=$(awk '/^consecutive_failures:/ {sub(/^consecutive_failures: */,""); sub(/ *$/,""); print; exit}' "$file" 2>/dev/null || echo "0")
+    local new=$((current + 1))
+    if grep -q "^consecutive_failures:" "$file"; then
+        sed -i.bak "s/^consecutive_failures:.*/consecutive_failures: ${new}/" "$file"
+        rm -f "${file}.bak"
+    fi
 }
 
 # ============================================================================
 # CORE EVENT LOGGING
 # ============================================================================
 
-# Log an event to the database
-# Args: event_type, [category], [message], [data], [agent], [model], [tokens_input], [tokens_output], [cost_cents]
+# Log an event to events/<date>-events.md
+# Args: event_type, [category], [message], [data], [agent], [model], [tokens_input], [tokens_output]
 log_event() {
     local event_type="$1"
     local category="${2:-general}"
     local message="${3:-}"
-    local data="${4:-null}"
+    local data="${4:-}"
     local agent="${5:-}"
     local model="${6:-}"
     local tokens_input="${7:-0}"
     local tokens_output="${8:-0}"
-    local cost_cents="${9:-0}"
 
-    # Get current session
-    local session_id
-    session_id=$(get_current_session_id) || true
+    local session_id; session_id=$(get_current_session_id)
+    if [[ -z "$session_id" ]]; then
+        log_debug "No active session, skipping event log" "events"; return 0; fi
 
-    if [ -z "$session_id" ]; then
-        log_debug "No active session, skipping event log" "events"
-        return 0
-    fi
+    if ! validate_numeric "$tokens_input" "tokens_input"; then tokens_input=0; fi
+    if ! validate_numeric "$tokens_output" "tokens_output"; then tokens_output=0; fi
 
-    # Validate numeric values
-    if ! validate_numeric "$tokens_input" "tokens_input" 2>/dev/null; then
-        tokens_input=0
-    fi
-    if ! validate_numeric "$tokens_output" "tokens_output" 2>/dev/null; then
-        tokens_output=0
-    fi
-    if ! validate_decimal "$cost_cents" "cost_cents" 2>/dev/null; then
-        cost_cents=0
-    fi
+    local iteration; iteration=$(get_current_iteration) || iteration=0
+    local phase; phase=$(get_current_phase) || phase=""
+    local now; now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    local today; today=$(date +%Y-%m-%d)
+    local events_file="${EVENTS_DIR}/${today}-events.md"
 
-    # Get current iteration and phase
-    local iteration phase
-    iteration=$(get_current_iteration) || iteration=0
-    phase=$(get_current_phase) || phase=""
+    mkdir -p "$EVENTS_DIR"
+    [[ ! -f "$events_file" ]] && _atomic_write "$events_file" "# Events ${today}"
 
-    # Escape all string values for SQL safety
-    local esc_session_id esc_event_type esc_category esc_message esc_data esc_agent esc_model esc_phase
-    esc_session_id=$(sql_escape "$session_id")
-    esc_event_type=$(sql_escape "$event_type")
-    esc_category=$(sql_escape "$category")
-    esc_message=$(sql_escape "$message")
-    esc_data=$(sql_escape "$data")
-    esc_agent=$(sql_escape "$agent")
-    esc_model=$(sql_escape "$model")
-    esc_phase=$(sql_escape "$phase")
+    local entry="## ${now} — ${event_type}
+- session_id: ${session_id}
+- category: ${category}
+- message: ${message}"
+    [[ -n "$agent" ]]       && entry+="
+- agent: ${agent}"
+    [[ -n "$model" ]]       && entry+="
+- model: ${model}"
+    [[ -n "$iteration" ]]   && entry+="
+- iteration: ${iteration}"
+    [[ -n "$phase" ]]       && entry+="
+- phase: ${phase}"
+    [[ -n "$data" ]]        && entry+="
+- data: ${data}"
+    [[ "$tokens_input" -gt 0 ]]  && entry+="
+- tokens_input: ${tokens_input}"
+    [[ "$tokens_output" -gt 0 ]] && entry+="
+- tokens_output: ${tokens_output}"
 
-    local query="INSERT INTO events (
-            session_id, event_type, event_category, message, data,
-            agent, model, iteration, phase,
-            tokens_input, tokens_output, cost_cents
-        ) VALUES (
-            '$esc_session_id', '$esc_event_type', '$esc_category', '$esc_message', '$esc_data',
-            '$esc_agent', '$esc_model', ${iteration:-0}, '$esc_phase',
-            ${tokens_input:-0}, ${tokens_output:-0}, ${cost_cents:-0}
-        );"
-
-    if ! sql_exec "$query" > /dev/null; then
-        log_warn "Failed to log event: $event_type" "events"
-        return 1
-    fi
-
+    _atomic_append "$events_file" "$entry"
     log_debug "Event logged: $event_type" "events"
 }
 
@@ -159,89 +205,77 @@ log_event() {
 # SESSION EVENTS
 # ============================================================================
 
-# Log session started event
-# Args: command, command_type
 log_session_started() {
     local command="$1"
     local command_type="$2"
-
-    local json_data
-    json_data=$(json_object "command_type" "$command_type")
-    log_event "session_started" "session" "Session started: $command" "$json_data"
+    log_event "session_started" "session" "Session started: $command" \
+        "$(json_object "command_type" "$command_type")"
 }
 
-# Log session ended event
-# Args: status, reason
 log_session_ended() {
     local status="$1"
     local reason="$2"
-
-    local json_data
-    json_data=$(json_object "status" "$status" "reason" "$reason")
-    log_event "session_ended" "session" "Session ended: $status" "$json_data"
+    log_event "session_ended" "session" "Session ended: $status" \
+        "$(json_object "status" "$status" "reason" "$reason")"
 }
 
 # ============================================================================
 # PHASE EVENTS
 # ============================================================================
 
-# Log phase change event
-# Args: new_phase, [previous_phase]
 log_phase_changed() {
     local new_phase="$1"
     local previous_phase="${2:-}"
-
-    local json_data
-    json_data=$(json_object "previous" "$previous_phase" "current" "$new_phase")
-    log_event "phase_changed" "phase" "Phase: $new_phase" "$json_data"
+    log_event "phase_changed" "phase" "Phase: $new_phase" \
+        "$(json_object "previous" "$previous_phase" "current" "$new_phase")"
 }
 
 # ============================================================================
 # AGENT EVENTS
 # ============================================================================
 
-# Log agent started event
-# Args: agent, model, [task_id]
 log_agent_started() {
     local agent="$1"
     local model="$2"
     local task_id="${3:-}"
 
-    if [ -z "$agent" ]; then
-        log_error "Agent name required" "events"
-        return 1
-    fi
+    if [[ -z "$agent" ]]; then log_error "Agent name required" "events"; return 1; fi
 
-    local json_data
-    json_data=$(json_object "task_id" "$task_id")
+    local json_data; json_data=$(json_object "task_id" "$task_id")
     log_event "agent_started" "agent" "Agent started: $agent ($model)" \
         "$json_data" "$agent" "$model"
 
-    # Also insert into agent_runs table
-    local session_id
-    session_id=$(get_current_session_id) || true
+    # Create agent-run file
+    local session_id; session_id=$(get_current_session_id)
+    [[ -z "$session_id" ]] && return 0
+    local iteration; iteration=$(get_current_iteration) || iteration=0
+    local run_id; run_id=$(generate_id "run")
+    local now; now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
-    if [ -z "$session_id" ]; then
-        return 0
-    fi
+    mkdir -p "$AGENT_RUNS_DIR"
+    local body="---
+run_id: ${run_id}
+session_id: ${session_id}
+agent: ${agent}
+model: ${model}
+started_at: ${now}
+ended_at: ~
+duration_seconds: ~
+status: running
+iteration: ${iteration}
+task_id: ${task_id}
+files_changed: []
+tokens_input: 0
+tokens_output: 0
+cost_cents: 0
+error_message: ~
+---
 
-    local iteration
-    iteration=$(get_current_iteration) || iteration=0
-
-    local esc_session_id esc_agent esc_model esc_task_id
-    esc_session_id=$(sql_escape "$session_id")
-    esc_agent=$(sql_escape "$agent")
-    esc_model=$(sql_escape "$model")
-    esc_task_id=$(sql_escape "$task_id")
-
-    local query="INSERT INTO agent_runs (session_id, agent, model, task_id, iteration, status)
-        VALUES ('$esc_session_id', '$esc_agent', '$esc_model', NULLIF('$esc_task_id', ''), ${iteration:-0}, 'running');"
-
-    sql_exec "$query" > /dev/null || log_warn "Failed to insert agent_runs record" "events"
+# Agent run: ${agent}
+"
+    _atomic_write "${AGENT_RUNS_DIR}/${run_id}.md" "$body"
 }
 
-# Log agent completed event
-# Args: agent, model, [files_changed], [tokens_input], [tokens_output], [cost_cents]
 log_agent_completed() {
     local agent="$1"
     local model="$2"
@@ -250,567 +284,270 @@ log_agent_completed() {
     local tokens_output="${5:-0}"
     local cost_cents="${6:-0}"
 
-    if [ -z "$agent" ]; then
-        log_error "Agent name required" "events"
-        return 1
-    fi
+    if [[ -z "$agent" ]]; then log_error "Agent name required" "events"; return 1; fi
 
-    # Validate numeric values
-    if ! validate_numeric "$tokens_input" "tokens_input" 2>/dev/null; then
-        tokens_input=0
-    fi
-    if ! validate_numeric "$tokens_output" "tokens_output" 2>/dev/null; then
-        tokens_output=0
-    fi
-    if ! validate_decimal "$cost_cents" "cost_cents" 2>/dev/null; then
-        cost_cents=0
-    fi
+    if ! validate_numeric "$tokens_input" "tokens_input";  then tokens_input=0; fi
+    if ! validate_numeric "$tokens_output" "tokens_output"; then tokens_output=0; fi
+    if ! validate_decimal "$cost_cents" "cost_cents";     then cost_cents=0; fi
 
     log_event "agent_completed" "agent" "Agent completed: $agent" \
-        "{\"files_changed\": $files_changed}" "$agent" "$model" \
-        "$tokens_input" "$tokens_output" "$cost_cents"
+        "$(json_object "files_changed" "$files_changed")" \
+        "$agent" "$model" "$tokens_input" "$tokens_output"
 
-    # Update agent_runs table
-    local session_id
-    session_id=$(get_current_session_id) || true
-
-    if [ -z "$session_id" ]; then
-        return 0
+    # Update most recent running agent-run for this session
+    local session_id; session_id=$(get_current_session_id)
+    [[ -z "$session_id" ]] && return 0
+    local now; now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    if [[ -d "$AGENT_RUNS_DIR" ]]; then
+        local latest_run
+        latest_run=$(ls -t "$AGENT_RUNS_DIR"/${session_id}-*.md 2>/dev/null | head -1 || true)
+        [[ -z "$latest_run" ]] && latest_run=$(ls -t "$AGENT_RUNS_DIR"/*.md 2>/dev/null | head -1 || true)
+        if [[ -n "$latest_run" ]] && grep -q "^status: running" "$latest_run" 2>/dev/null; then
+            local ended_at; ended_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+            local started_str; started_str=$(awk '/^started_at:/ {sub(/^started_at: */,""); print}' "$latest_run" 2>/dev/null || echo '')
+            local started_epoch; started_epoch=$(date -jf "%Y-%m-%dT%H:%M:%SZ" "$started_str" +%s 2>/dev/null || echo 0)
+            local now_epoch; now_epoch=$(date +%s)
+            local duration=$((now_epoch - started_epoch))
+            sed -i.bak \
+                -e "s|^status: running|status: success|" \
+                -e "s|^ended_at:.*|ended_at: ${now}|" \
+                -e "s|^duration_seconds:.*|duration_seconds: ${duration}|" \
+                -e "s|^tokens_input:.*|tokens_input: ${tokens_input}|" \
+                -e "s|^tokens_output:.*|tokens_output: ${tokens_output}|" \
+                -e "s|^cost_cents:.*|cost_cents: ${cost_cents}|" \
+                "$latest_run" 2>/dev/null || true
+            rm -f "${latest_run}.bak"
+        fi
     fi
-
-    local esc_session_id esc_agent esc_files_changed
-    esc_session_id=$(sql_escape "$session_id")
-    esc_agent=$(sql_escape "$agent")
-    esc_files_changed=$(sql_escape "$files_changed")
-
-    local esc_model
-    esc_model=$(sql_escape "$model")
-
-    # NOTE: We match on agent+model+session to disambiguate concurrent runs of the
-    # same agent at different model tiers (e.g. after escalation). If two runs share
-    # the same agent name AND model simultaneously, the LIMIT 1 / ORDER BY started_at
-    # heuristic may update the wrong row. A proper fix would be to return the rowid
-    # from log_agent_started() and pass it here, but that requires callers to change.
-    local query="BEGIN IMMEDIATE TRANSACTION;
-        UPDATE agent_runs
-        SET status = 'success',
-            ended_at = CURRENT_TIMESTAMP,
-            duration_seconds = CAST((julianday(CURRENT_TIMESTAMP) - julianday(started_at)) * 86400 AS INTEGER),
-            files_changed = '$esc_files_changed',
-            tokens_input = ${tokens_input:-0},
-            tokens_output = ${tokens_output:-0},
-            cost_cents = ${cost_cents:-0}
-        WHERE rowid = (
-            SELECT rowid FROM agent_runs
-            WHERE session_id = '$esc_session_id'
-            AND agent = '$esc_agent'
-            AND model = '$esc_model'
-            AND status = 'running'
-            ORDER BY started_at DESC
-            LIMIT 1
-        );
-        COMMIT;"
-
-    sql_exec "$query" > /dev/null || log_warn "Failed to update agent_runs record" "events"
-
-    # Update session totals
-    add_tokens "$tokens_input" "$tokens_output" "$cost_cents" || log_warn "Failed to update session token totals" "events"
 }
 
-# Log agent failed event
-# Args: agent, model, error_message, [error_type]
 log_agent_failed() {
     local agent="$1"
     local model="$2"
     local error_message="$3"
     local error_type="${4:-unknown}"
 
-    if [ -z "$agent" ]; then
-        log_error "Agent name required" "events"
-        return 1
-    fi
+    if [[ -z "$agent" ]]; then log_error "Agent name required" "events"; return 1; fi
 
-    local json_data
-    json_data=$(json_object "error_type" "$error_type")
     log_event "agent_failed" "agent" "Agent failed: $agent - $error_message" \
-        "$json_data" "$agent" "$model"
+        "$(json_object "error_type" "$error_type")" "$agent" "$model"
 
-    # Update agent_runs table
-    local session_id
-    session_id=$(get_current_session_id) || true
+    increment_failures
 
-    if [ -z "$session_id" ]; then
-        return 0
+    # Update most recent running agent-run for this session
+    local session_id; session_id=$(get_current_session_id)
+    [[ -z "$session_id" ]] && return 0
+    local now; now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    if [[ -d "$AGENT_RUNS_DIR" ]]; then
+        local latest_run
+        latest_run=$(ls -t "$AGENT_RUNS_DIR"/*.md 2>/dev/null | head -1 || true)
+        if [[ -n "$latest_run" ]] && grep -q "^status: running" "$latest_run" 2>/dev/null; then
+            sed -i.bak \
+                -e "s|^status: running|status: failed|" \
+                -e "s|^ended_at:.*|ended_at: ${now}|" \
+                -e "s|^error_message:.*|error_message: ${error_message}|" \
+                -e "s|^error_type:.*|error_type: ${error_type}|" \
+                "$latest_run" 2>/dev/null || true
+            rm -f "${latest_run}.bak"
+        fi
     fi
-
-    local esc_session_id esc_agent esc_error_message esc_error_type
-    esc_session_id=$(sql_escape "$session_id")
-    esc_agent=$(sql_escape "$agent")
-    esc_error_message=$(sql_escape "$error_message")
-    esc_error_type=$(sql_escape "$error_type")
-
-    local esc_model
-    esc_model=$(sql_escape "$model")
-
-    # NOTE: Match on model too to disambiguate concurrent same-name agents at
-    # different tiers. See comment in log_agent_completed() for remaining caveats.
-    local query="UPDATE agent_runs
-        SET status = 'failed',
-            ended_at = CURRENT_TIMESTAMP,
-            duration_seconds = CAST((julianday(CURRENT_TIMESTAMP) - julianday(started_at)) * 86400 AS INTEGER),
-            error_message = '$esc_error_message',
-            error_type = '$esc_error_type'
-        WHERE rowid = (
-            SELECT rowid FROM agent_runs
-            WHERE session_id = '$esc_session_id'
-            AND agent = '$esc_agent'
-            AND model = '$esc_model'
-            AND status = 'running'
-            ORDER BY started_at DESC
-            LIMIT 1
-        );"
-
-    sql_exec "$query" > /dev/null || log_warn "Failed to update agent_runs record" "events"
-
-    # Increment failure counter
-    increment_failures || true
 }
 
 # ============================================================================
 # ESCALATION EVENTS
 # ============================================================================
 
-# Log model escalated event
-# Args: from_model, to_model, reason, [agent]
 log_model_escalated() {
     local from_model="$1"
     local to_model="$2"
     local reason="$3"
     local agent="${4:-}"
-
-    local json_from json_to json_reason
-    json_from=$(json_escape "$from_model")
-    json_to=$(json_escape "$to_model")
-    json_reason=$(json_escape "$reason")
-
-    log_event "model_escalated" "escalation" "Model escalated: $from_model -> $to_model ($reason)" \
-        "{\"from\": \"$json_from\", \"to\": \"$json_to\", \"reason\": \"$json_reason\"}" "$agent" "$to_model"
-
-    # Record in escalations table
-    record_escalation "$from_model" "$to_model" "$reason" "$agent" || true
+    log_event "model_escalated" "escalation" \
+        "Model escalated: $from_model -> $to_model ($reason)" \
+        "$(json_object "from" "$from_model" "to" "$to_model" "reason" "$reason")" \
+        "$agent" "$to_model"
 }
 
-# Log model de-escalated event
-# Args: from_model, to_model, reason
 log_model_deescalated() {
     local from_model="$1"
     local to_model="$2"
     local reason="$3"
-
-    local json_from json_to json_reason
-    json_from=$(json_escape "$from_model")
-    json_to=$(json_escape "$to_model")
-    json_reason=$(json_escape "$reason")
-
-    log_event "model_deescalated" "escalation" "Model de-escalated: $from_model -> $to_model ($reason)" \
-        "{\"from\": \"$json_from\", \"to\": \"$json_to\", \"reason\": \"$json_reason\"}"
+    log_event "model_deescalated" "escalation" \
+        "Model de-escalated: $from_model -> $to_model ($reason)" \
+        "$(json_object "from" "$from_model" "to" "$to_model" "reason" "$reason")"
 }
 
 # ============================================================================
 # QUALITY GATE EVENTS
 # ============================================================================
 
-# Log gate passed event
-# Args: gate, [details]
 log_gate_passed() {
     local gate="$1"
     local details="${2:-{}}"
 
-    if [ -z "$gate" ]; then
-        log_error "Gate name required" "events"
-        return 1
-    fi
+    if [[ -z "$gate" ]]; then log_error "Gate name required" "events"; return 1; fi
 
-    local esc_details
-    esc_details=$(sql_escape "$details")
     log_event "gate_passed" "gate" "Gate passed: $gate" "$details"
 
-    # Insert into gate_results table
-    local session_id
-    session_id=$(get_current_session_id) || true
-
-    if [ -z "$session_id" ]; then
-        return 0
-    fi
-
-    local iteration
-    iteration=$(get_current_iteration) || iteration=0
-
-    local esc_session_id esc_gate
-    esc_session_id=$(sql_escape "$session_id")
-    esc_gate=$(sql_escape "$gate")
-
-    local query="INSERT INTO gate_results (session_id, gate, iteration, passed, details)
-        VALUES ('$esc_session_id', '$esc_gate', ${iteration:-0}, TRUE, '$esc_details');"
-
-    sql_exec "$query" > /dev/null || log_warn "Failed to insert gate_results record" "events"
+    local session_id; session_id=$(get_current_session_id)
+    [[ -z "$session_id" ]] && return 0
+    local iteration; iteration=$(get_current_iteration) || iteration=0
+    local now; now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    mkdir -p "$(dirname "$GATES_DIR")"
+    [[ ! -f "$GATES_DIR" ]] && _atomic_write "$GATES_DIR" "# Quality Gates"
+    _atomic_append "$GATES_DIR" "## ${now} — gate_passed: ${gate}
+- session_id: ${session_id}
+- iteration: ${iteration}
+- status: pass
+- gate: ${gate}
+- details: ${details}"
 }
 
-# Log gate failed event
-# Args: gate, [error_count], [details]
 log_gate_failed() {
     local gate="$1"
     local error_count="${2:-0}"
     local details="${3:-{}}"
 
-    if [ -z "$gate" ]; then
-        log_error "Gate name required" "events"
-        return 1
-    fi
+    if [[ -z "$gate" ]]; then log_error "Gate name required" "events"; return 1; fi
+    if ! validate_numeric "$error_count" "error_count"; then error_count=0; fi
 
-    # Validate error_count
-    if ! validate_numeric "$error_count" "error_count" 2>/dev/null; then
-        error_count=0
-    fi
-
-    local esc_details
-    esc_details=$(sql_escape "$details")
     log_event "gate_failed" "gate" "Gate failed: $gate ($error_count errors)" "$details"
 
-    # Insert into gate_results table
-    local session_id
-    session_id=$(get_current_session_id) || true
-
-    if [ -z "$session_id" ]; then
-        return 0
-    fi
-
-    local iteration
-    iteration=$(get_current_iteration) || iteration=0
-
-    local esc_session_id esc_gate
-    esc_session_id=$(sql_escape "$session_id")
-    esc_gate=$(sql_escape "$gate")
-
-    local query="INSERT INTO gate_results (session_id, gate, iteration, passed, error_count, details)
-        VALUES ('$esc_session_id', '$esc_gate', ${iteration:-0}, FALSE, ${error_count:-0}, '$esc_details');"
-
-    sql_exec "$query" > /dev/null || log_warn "Failed to insert gate_results record" "events"
+    local session_id; session_id=$(get_current_session_id)
+    [[ -z "$session_id" ]] && return 0
+    local iteration; iteration=$(get_current_iteration) || iteration=0
+    local now; now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    mkdir -p "$(dirname "$GATES_DIR")"
+    [[ ! -f "$GATES_DIR" ]] && _atomic_write "$GATES_DIR" "# Quality Gates"
+    _atomic_append "$GATES_DIR" "## ${now} — gate_failed: ${gate}
+- session_id: ${session_id}
+- iteration: ${iteration}
+- status: fail
+- gate: ${gate}
+- error_count: ${error_count}
+- details: ${details}"
 }
 
 # ============================================================================
 # BUG COUNCIL EVENTS
 # ============================================================================
 
-# Log bug council activated event
-# Args: reason
 log_bug_council_activated() {
     local reason="$1"
-
-    if [ -z "$reason" ]; then
-        log_error "Reason required" "events"
-        return 1
-    fi
-
-    local json_reason
-    json_reason=$(json_escape "$reason")
-    log_event "bug_council_activated" "bug_council" "Bug Council activated: $reason" \
-        "{\"reason\": \"$json_reason\"}"
-
-    activate_bug_council "$reason" || true
+    if [[ -z "$reason" ]]; then log_error "Reason required" "events"; return 1; fi
+    log_event "bug_council_activated" "bug_council" \
+        "Bug Council activated: $reason" \
+        "$(json_object "reason" "$reason")"
 }
 
-# Log bug council completed event
-# Args: winning_proposal, [votes]
 log_bug_council_completed() {
     local winning_proposal="$1"
     local votes="${2:-{}}"
-
-    local esc_votes
-    esc_votes=$(sql_escape "$votes")
-    log_event "bug_council_completed" "bug_council" "Bug Council decision: $winning_proposal" "$votes"
+    log_event "bug_council_completed" "bug_council" \
+        "Bug Council decision: $winning_proposal" "$votes"
 }
 
 # ============================================================================
 # INTERVIEW EVENTS
 # ============================================================================
 
-# Log interview started event
-# Args: interview_type
 log_interview_started() {
     local interview_type="$1"
-
-    if [ -z "$interview_type" ]; then
-        log_error "Interview type required" "events"
-        return 1
-    fi
-
-    local esc_type
-    esc_type=$(sql_escape "$interview_type")
-    log_event "interview_started" "interview" "Interview started: $interview_type" \
-        "{\"type\": \"$esc_type\"}"
-
-    # Create interview record
-    local session_id
-    session_id=$(get_current_session_id) || true
-
-    if [ -z "$session_id" ]; then
-        return 0
-    fi
-
-    local esc_session_id
-    esc_session_id=$(sql_escape "$session_id")
-
-    local query="INSERT INTO interviews (session_id, interview_type, status)
-        VALUES ('$esc_session_id', '$esc_type', 'in_progress');"
-
-    sql_exec "$query" > /dev/null || log_warn "Failed to insert interview record" "events"
+    if [[ -z "$interview_type" ]]; then log_error "Interview type required" "events"; return 1; fi
+    log_event "interview_started" "interview" \
+        "Interview started: $interview_type" \
+        "$(json_object "type" "$interview_type")"
 }
 
-# Log interview question event
-# Args: question_key, question_text, [response]
 log_interview_question() {
     local question_key="$1"
     local question_text="$2"
     local response="${3:-}"
-
-    local esc_key esc_response
-    esc_key=$(sql_escape "$question_key")
-    esc_response=$(sql_escape "$response")
     log_event "interview_question" "interview" "Q: $question_text" \
-        "{\"key\": \"$esc_key\", \"response\": \"$esc_response\"}"
+        "$(json_object "key" "$question_key" "response" "$response")"
 }
 
-# Log interview completed event
-# Args: questions_count
 log_interview_completed() {
     local questions_count="$1"
-
-    # Validate questions_count
-    if ! validate_numeric "$questions_count" "questions_count" 2>/dev/null; then
-        questions_count=0
-    fi
-
-    log_event "interview_completed" "interview" "Interview completed ($questions_count questions)" \
-        "{\"questions_count\": ${questions_count:-0}}"
-
-    # Update interview record
-    local session_id
-    session_id=$(get_current_session_id) || true
-
-    if [ -z "$session_id" ]; then
-        return 0
-    fi
-
-    local esc_session_id
-    esc_session_id=$(sql_escape "$session_id")
-
-    local query="UPDATE interviews
-        SET status = 'completed',
-            completed_at = CURRENT_TIMESTAMP,
-            questions_answered = ${questions_count:-0}
-        WHERE rowid = (
-            SELECT rowid FROM interviews
-            WHERE session_id = '$esc_session_id'
-            AND status = 'in_progress'
-            ORDER BY started_at DESC
-            LIMIT 1
-        );"
-
-    sql_exec "$query" > /dev/null || log_warn "Failed to update interview record" "events"
+    if ! validate_numeric "$questions_count" "questions_count"; then questions_count=0; fi
+    log_event "interview_completed" "interview" \
+        "Interview completed ($questions_count questions)" \
+        "$(json_object "questions_count" "$questions_count")"
 }
 
 # ============================================================================
 # RESEARCH EVENTS
 # ============================================================================
 
-# Log research started event
 log_research_started() {
     log_event "research_started" "research" "Research phase started"
-
-    # Create research session record
-    local session_id
-    session_id=$(get_current_session_id) || true
-
-    if [ -z "$session_id" ]; then
-        return 0
-    fi
-
-    local esc_session_id
-    esc_session_id=$(sql_escape "$session_id")
-
-    local query="INSERT INTO research_sessions (session_id, status)
-        VALUES ('$esc_session_id', 'in_progress');"
-
-    sql_exec "$query" > /dev/null || log_warn "Failed to insert research_sessions record" "events"
 }
 
-# Log research finding event
-# Args: finding_type, title, [description], [priority]
 log_research_finding() {
     local finding_type="$1"
     local title="$2"
     local description="${3:-}"
     local priority="${4:-medium}"
 
-    if [ -z "$finding_type" ] || [ -z "$title" ]; then
-        log_error "Finding type and title required" "events"
-        return 1
-    fi
+    if [[ -z "$finding_type" ]] || [[ -z "$title" ]]; then
+        log_error "Finding type and title required" "events"; return 1; fi
 
-    local esc_type esc_priority
-    esc_type=$(sql_escape "$finding_type")
-    esc_priority=$(sql_escape "$priority")
     log_event "research_finding" "research" "Finding: $title" \
-        "{\"type\": \"$esc_type\", \"priority\": \"$esc_priority\"}"
-
-    # Insert finding record
-    local session_id
-    session_id=$(get_current_session_id) || true
-
-    if [ -z "$session_id" ]; then
-        return 0
-    fi
-
-    local esc_session_id esc_title esc_description
-    esc_session_id=$(sql_escape "$session_id")
-    esc_title=$(sql_escape "$title")
-    esc_description=$(sql_escape "$description")
-
-    local query="INSERT INTO research_findings (
-            research_session_id,
-            finding_type,
-            title,
-            description,
-            priority
-        )
-        SELECT id, '$esc_type', '$esc_title', '$esc_description', '$esc_priority'
-        FROM research_sessions
-        WHERE session_id = '$esc_session_id'
-        ORDER BY started_at DESC
-        LIMIT 1;"
-
-    sql_exec "$query" > /dev/null || log_warn "Failed to insert research_findings record" "events"
+        "$(json_object "type" "$finding_type" "priority" "$priority" "description" "$description")"
 }
 
-# Log research completed event
-# Args: findings_count, [blockers_count]
 log_research_completed() {
     local findings_count="$1"
     local blockers_count="${2:-0}"
 
-    # Validate numeric values
-    if ! validate_numeric "$findings_count" "findings_count" 2>/dev/null; then
-        findings_count=0
-    fi
-    if ! validate_numeric "$blockers_count" "blockers_count" 2>/dev/null; then
-        blockers_count=0
-    fi
+    if ! validate_numeric "$findings_count" "findings_count";  then findings_count=0; fi
+    if ! validate_numeric "$blockers_count" "blockers_count"; then blockers_count=0; fi
 
-    log_event "research_completed" "research" "Research completed ($findings_count findings, $blockers_count blockers)" \
-        "{\"findings\": ${findings_count:-0}, \"blockers\": ${blockers_count:-0}}"
-
-    # Update research session record
-    local session_id
-    session_id=$(get_current_session_id) || true
-
-    if [ -z "$session_id" ]; then
-        return 0
-    fi
-
-    local esc_session_id
-    esc_session_id=$(sql_escape "$session_id")
-
-    local query="UPDATE research_sessions
-        SET status = 'completed',
-            completed_at = CURRENT_TIMESTAMP,
-            findings_count = ${findings_count:-0},
-            blockers_found = ${blockers_count:-0}
-        WHERE rowid = (
-            SELECT rowid FROM research_sessions
-            WHERE session_id = '$esc_session_id'
-            AND status = 'in_progress'
-            ORDER BY started_at DESC
-            LIMIT 1
-        );"
-
-    sql_exec "$query" > /dev/null || log_warn "Failed to update research_sessions record" "events"
+    log_event "research_completed" "research" \
+        "Research completed ($findings_count findings, $blockers_count blockers)" \
+        "$(json_object "findings" "$findings_count" "blockers" "$blockers_count")"
 }
 
 # ============================================================================
 # TASK EVENTS
 # ============================================================================
 
-# Log task started event
-# Args: task_id, task_description
 log_task_started() {
     local task_id="$1"
     local task_description="$2"
-
-    if [ -z "$task_id" ]; then
-        log_error "Task ID required" "events"
-        return 1
-    fi
-
-    local esc_task_id
-    esc_task_id=$(sql_escape "$task_id")
+    if [[ -z "$task_id" ]]; then log_error "Task ID required" "events"; return 1; fi
     log_event "task_started" "task" "Task started: $task_id - $task_description" \
-        "{\"task_id\": \"$esc_task_id\"}"
+        "$(json_object "task_id" "$task_id")"
 }
 
-# Log task completed event
-# Args: task_id
 log_task_completed() {
     local task_id="$1"
-
-    if [ -z "$task_id" ]; then
-        log_error "Task ID required" "events"
-        return 1
-    fi
-
-    local esc_task_id
-    esc_task_id=$(sql_escape "$task_id")
+    if [[ -z "$task_id" ]]; then log_error "Task ID required" "events"; return 1; fi
     log_event "task_completed" "task" "Task completed: $task_id" \
-        "{\"task_id\": \"$esc_task_id\"}"
+        "$(json_object "task_id" "$task_id")"
 }
 
-# Log task failed event
-# Args: task_id, reason
 log_task_failed() {
     local task_id="$1"
     local reason="$2"
-
-    if [ -z "$task_id" ]; then
-        log_error "Task ID required" "events"
-        return 1
-    fi
-
-    local esc_task_id esc_reason
-    esc_task_id=$(sql_escape "$task_id")
-    esc_reason=$(sql_escape "$reason")
+    if [[ -z "$task_id" ]]; then log_error "Task ID required" "events"; return 1; fi
     log_event "task_failed" "task" "Task failed: $task_id - $reason" \
-        "{\"task_id\": \"$esc_task_id\", \"reason\": \"$esc_reason\"}"
+        "$(json_object "task_id" "$task_id" "reason" "$reason")"
 }
 
 # ============================================================================
 # ERROR AND WARNING EVENTS
 # ============================================================================
 
-# Log error event
-# Args: message, [details]
 log_error_event() {
     local message="$1"
     local details="${2:-{}}"
-
     log_event "error_occurred" "error" "$message" "$details"
 }
 
-# Log warning event
-# Args: message, [details]
 log_warning_event() {
     local message="$1"
     local details="${2:-{}}"
-
     log_event "warning_issued" "warning" "$message" "$details"
 }
 
@@ -818,163 +555,83 @@ log_warning_event() {
 # ABANDONMENT EVENTS
 # ============================================================================
 
-# Log abandonment detected event
-# Args: pattern, attempt_number
 log_abandonment_detected() {
     local pattern="$1"
     local attempt_number="$2"
-
-    # Validate attempt_number
-    if ! validate_numeric "$attempt_number" "attempt_number" 2>/dev/null; then
-        attempt_number=0
-    fi
-
-    local esc_pattern
-    esc_pattern=$(sql_escape "$pattern")
-    log_event "abandonment_detected" "persistence" "Abandonment pattern detected: $pattern (attempt $attempt_number)" \
-        "{\"pattern\": \"$esc_pattern\", \"attempt\": ${attempt_number:-0}}"
+    if ! validate_numeric "$attempt_number" "attempt_number"; then attempt_number=0; fi
+    log_event "abandonment_detected" "persistence" \
+        "Abandonment pattern detected: $pattern (attempt $attempt_number)" \
+        "$(json_object "pattern" "$pattern" "attempt" "$attempt_number")"
 }
 
-# Log abandonment prevented event
-# Args: action
 log_abandonment_prevented() {
     local action="$1"
-
-    local esc_action
-    esc_action=$(sql_escape "$action")
-    log_event "abandonment_prevented" "persistence" "Abandonment prevented: $action" \
-        "{\"action\": \"$esc_action\"}"
+    log_event "abandonment_prevented" "persistence" \
+        "Abandonment prevented: $action" "$(json_object "action" "$action")"
 }
 
 # ============================================================================
-# QUERY FUNCTIONS
+# QUERY FUNCTIONS (file-based)
 # ============================================================================
 
-# Get recent events for current session
-# Args: [limit], [session_id]
 get_recent_events() {
     local limit="${1:-20}"
     local session_id="${2:-}"
+    if ! validate_numeric "$limit" "limit"; then limit=20; fi
+    if [[ -z "$session_id" ]]; then session_id=$(get_current_session_id); fi
+    [[ -z "$session_id" ]] && return 0
+    if ! validate_session_id "$session_id"; then return 1; fi
 
-    # Validate limit
-    if ! validate_numeric "$limit" "limit" 2>/dev/null; then
-        limit=20
+    local today; today=$(date +%Y-%m-%d)
+    local events_file="${EVENTS_DIR}/${today}-events.md"
+    if [[ -f "$events_file" ]]; then
+        grep -A 10 "^## .*— " "$events_file" 2>/dev/null | head -$((limit * 10))
     fi
-
-    if [ -z "$session_id" ]; then
-        session_id=$(get_current_session_id) || true
-    fi
-
-    if [ -z "$session_id" ]; then
-        return 0
-    fi
-
-    if ! validate_session_id "$session_id"; then
-        return 1
-    fi
-
-    local esc_session_id
-    esc_session_id=$(sql_escape "$session_id")
-
-    sql_exec_table "SELECT timestamp, event_type, message
-        FROM events
-        WHERE session_id = '$esc_session_id'
-        ORDER BY timestamp DESC
-        LIMIT ${limit:-20};"
 }
 
-# Get events by type
-# Args: event_type, [session_id]
 get_events_by_type() {
     local event_type="$1"
     local session_id="${2:-}"
+    if [[ -z "$event_type" ]]; then log_error "Event type required" "events"; return 1; fi
+    if [[ -z "$session_id" ]]; then session_id=$(get_current_session_id); fi
+    [[ -z "$session_id" ]] && echo "[]" && return 0
+    if ! validate_session_id "$session_id"; then echo "[]"; return 1; fi
 
-    if [ -z "$event_type" ]; then
-        log_error "Event type required" "events"
-        return 1
+    local today; today=$(date +%Y-%m-%d)
+    local events_file="${EVENTS_DIR}/${today}-events.md"
+    if [[ -f "$events_file" ]]; then
+        grep -B 1 -A 8 "^## .*— ${event_type}" "$events_file" 2>/dev/null
     fi
-
-    if [ -z "$session_id" ]; then
-        session_id=$(get_current_session_id) || true
-    fi
-
-    if [ -z "$session_id" ]; then
-        echo "[]"
-        return 0
-    fi
-
-    if ! validate_session_id "$session_id"; then
-        echo "[]"
-        return 1
-    fi
-
-    local esc_session_id esc_event_type
-    esc_session_id=$(sql_escape "$session_id")
-    esc_event_type=$(sql_escape "$event_type")
-
-    sql_exec_json "SELECT * FROM events
-        WHERE session_id = '$esc_session_id'
-        AND event_type = '$esc_event_type'
-        ORDER BY timestamp;"
 }
 
-# Get escalation history
-# Args: [session_id]
-get_escalation_history() {
-    local session_id="${1:-}"
-
-    if [ -z "$session_id" ]; then
-        session_id=$(get_current_session_id) || true
-    fi
-
-    if [ -z "$session_id" ]; then
-        return 0
-    fi
-
-    if ! validate_session_id "$session_id"; then
-        return 1
-    fi
-
-    local esc_session_id
-    esc_session_id=$(sql_escape "$session_id")
-
-    sql_exec_table "SELECT timestamp, from_model, to_model, reason, agent
-        FROM escalations
-        WHERE session_id = '$esc_session_id'
-        ORDER BY timestamp;"
-}
-
-# Get gate results for current session
-# Args: [session_id]
 get_gate_results() {
     local session_id="${1:-}"
+    if [[ -z "$session_id" ]]; then session_id=$(get_current_session_id); fi
+    [[ -z "$session_id" ]] && return 0
+    if ! validate_session_id "$session_id"; then return 1; fi
 
-    if [ -z "$session_id" ]; then
-        session_id=$(get_current_session_id) || true
+    if [[ -f "$GATES_DIR" ]]; then
+        grep -B 1 -A 6 "session_id: ${session_id}" "$GATES_DIR" 2>/dev/null
     fi
+}
 
-    if [ -z "$session_id" ]; then
-        return 0
+get_escalation_history() {
+    local session_id="${1:-}"
+    if [[ -z "$session_id" ]]; then session_id=$(get_current_session_id); fi
+    [[ -z "$session_id" ]] && return 0
+    if ! validate_session_id "$session_id"; then return 1; fi
+
+    local today; today=$(date +%Y-%m-%d)
+    local events_file="${EVENTS_DIR}/${today}-events.md"
+    if [[ -f "$events_file" ]]; then
+        grep -B 1 -A 5 "^## .*— model_escalated" "$events_file" 2>/dev/null
     fi
-
-    if ! validate_session_id "$session_id"; then
-        return 1
-    fi
-
-    local esc_session_id
-    esc_session_id=$(sql_escape "$session_id")
-
-    sql_exec_table "SELECT iteration, gate, passed, error_count, timestamp
-        FROM gate_results
-        WHERE session_id = '$esc_session_id'
-        ORDER BY timestamp;"
 }
 
 # ============================================================================
 # INITIALIZATION
 # ============================================================================
 
-# Set up error handling when script is sourced
 if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
     setup_error_trap
 fi

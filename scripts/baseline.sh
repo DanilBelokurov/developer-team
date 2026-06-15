@@ -9,7 +9,8 @@ source "${SCRIPT_DIR}/lib/common.sh"
 
 PROJECT_ROOT="${PROJECT_ROOT:-$(pwd)}"
 DEVTEAM_DIR="${PROJECT_ROOT}/.devteam"
-DB_FILE="${DEVTEAM_DIR}/devteam.db"
+BASELINE_LOG="${DEVTEAM_DIR}/baseline-log.json"
+ROLLBACK_LOG="${DEVTEAM_DIR}/rollback-log.json"
 
 # ensure_git is now provided by scripts/lib/common.sh
 
@@ -55,21 +56,28 @@ This is an automatic baseline commit for rollback purposes."
     log_info "Created baseline: ${tag_name}"
     log_info "Commit: ${commit_hash:0:8}"
 
-    # Record in database if available
-    if [[ -f "$DB_FILE" ]]; then
-        local sql_tag sql_hash sql_milestone sql_desc
-        sql_tag=$(sql_escape "$tag_name")
-        sql_hash=$(sql_escape "$commit_hash")
-        sql_milestone=$(sql_escape "$milestone")
-        sql_desc=$(sql_escape "$description")
+    # Record in baseline log
+    mkdir -p "$DEVTEAM_DIR"
+    local branch_name
+    branch_name=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '')
+    local log_entry
+    log_entry=$(json_object \
+        "tag_name" "$tag_name" \
+        "commit_hash" "$commit_hash" \
+        "milestone" "$milestone" \
+        "description" "$description" \
+        "branch" "$branch_name" \
+        "created_at" "$(date -Iseconds)")
 
-        local sql_branch
-        sql_branch=$(sql_escape "$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '')")
-
-        # Note: all values are escaped via sql_escape above to prevent SQL injection
-        sql_exec "INSERT INTO baselines (tag_name, commit_hash, milestone, description, branch, created_at) VALUES ('${sql_tag}', '${sql_hash}', '${sql_milestone}', '${sql_desc}', '${sql_branch}', datetime('now'));" > /dev/null
-        log_info "Recorded baseline in database"
+    if [[ ! -f "$BASELINE_LOG" ]]; then
+        echo "[$log_entry]" > "$BASELINE_LOG"
+    else
+        local tmp_log
+        tmp_log=$(safe_mktemp)
+        sed '$ s/]$/,/' "$BASELINE_LOG" > "$tmp_log" && mv "$tmp_log" "$BASELINE_LOG"
+        echo "$log_entry]" >> "$BASELINE_LOG"
     fi
+    log_info "Recorded baseline in log"
 
     echo "$commit_hash"
 }
@@ -148,16 +156,26 @@ rollback_to_baseline() {
     git reset --hard "$commit_hash"
     log_info "Rolled back to ${commit_hash:0:8}"
 
-    # Record rollback in database
-    if [[ -f "$DB_FILE" ]]; then
-        local sql_hash sql_target
-        sql_hash=$(sql_escape "$commit_hash")
-        sql_target=$(sql_escape "$target")
+    # Record rollback in log
+    mkdir -p "$DEVTEAM_DIR"
+    local rollback_entry
+    rollback_entry=$(json_object \
+        "type" "manual" \
+        "target_commit" "$commit_hash" \
+        "target_tag" "$target" \
+        "reason" "baseline rollback" \
+        "from_commit" "$(git rev-parse HEAD 2>/dev/null || echo 'unknown')" \
+        "timestamp" "$(date -Iseconds)")
 
-        # Note: all values are escaped via sql_escape above to prevent SQL injection
-        sql_exec "INSERT INTO rollbacks (rollback_type, target_commit, target_tag, rolled_back_at, reason) VALUES ('manual', '${sql_hash}', '${sql_target}', datetime('now'), 'manual rollback');" > /dev/null
-        log_info "Recorded rollback in database"
+    if [[ ! -f "$ROLLBACK_LOG" ]]; then
+        echo "[$rollback_entry]" > "$ROLLBACK_LOG"
+    else
+        local tmp_log
+        tmp_log=$(safe_mktemp)
+        sed '$ s/]$/,/' "$ROLLBACK_LOG" > "$tmp_log" && mv "$tmp_log" "$ROLLBACK_LOG"
+        echo "$rollback_entry]" >> "$ROLLBACK_LOG"
     fi
+    log_info "Recorded rollback in log"
 }
 
 # Create milestone-specific baselines

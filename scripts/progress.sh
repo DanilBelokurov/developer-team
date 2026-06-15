@@ -60,17 +60,15 @@ generate_progress_summary() {
     local recent_commits
     recent_commits=$(git log --oneline -5 2>/dev/null || echo "No commits yet")
 
-    # Get current session info from database
+    # Get current session info from file-based state
     local current_phase=""
     local current_iteration=0
     local session_status=""
 
     if [ -n "$session_id" ]; then
-        local esc_sid
-        esc_sid=$(sql_escape "$session_id")
-        current_phase=$(sql_exec "SELECT current_phase FROM sessions WHERE id = '$esc_sid';" 2>/dev/null || echo "")
-        current_iteration=$(sql_exec "SELECT current_iteration FROM sessions WHERE id = '$esc_sid';" 2>/dev/null || echo "0")
-        session_status=$(sql_exec "SELECT status FROM sessions WHERE id = '$esc_sid';" 2>/dev/null || echo "")
+        current_phase=$(get_current_phase 2>/dev/null || echo "")
+        current_iteration=$(get_current_iteration 2>/dev/null || echo "0")
+        session_status=$(get_state "status" 2>/dev/null || echo "")
     fi
 
     # Generate the progress file
@@ -114,10 +112,8 @@ EOF
 
     log_info "Progress summary updated: $DEVTEAM_PROGRESS_FILE" "progress"
 
-    # Sync progress to database if session is available (H4)
-    if [ -n "$session_id" ]; then
-        sync_progress_to_db "$session_id"
-    fi
+    # Note: progress data is stored in features.json (file-based)
+    # No database sync needed
 }
 
 # Generate ASCII progress bar
@@ -340,115 +336,6 @@ get_feature_status() {
     ' "$DEVTEAM_FEATURES_FILE" 2>/dev/null || echo "unknown"
 }
 
-# ============================================================================
-# PROGRESS DATABASE SYNC
-# ============================================================================
-
-# Sync progress to database
-# Args: [session_id]
-sync_progress_to_db() {
-    local session_id="${1:-}"
-
-    if [ -z "$session_id" ]; then
-        session_id=$(get_current_session_id 2>/dev/null || echo "")
-    fi
-
-    if [ -z "$session_id" ]; then
-        log_warn "No session ID for progress sync" "progress"
-        return 1
-    fi
-
-    # Get stats
-    local total_features=0
-    local passing_features=0
-
-    if [ -f "$DEVTEAM_FEATURES_FILE" ]; then
-        total_features=$(jq '.features | length' "$DEVTEAM_FEATURES_FILE" 2>/dev/null || echo "0")
-        passing_features=$(jq '[.features[] | select(.passes == true)] | length' "$DEVTEAM_FEATURES_FILE" 2>/dev/null || echo "0")
-    fi
-
-    local remaining=$((total_features - passing_features))
-
-    # Get test status (from last gate result)
-    local tests_passing=0
-    local tests_failing=0
-
-    local esc_sync_sid
-    esc_sync_sid=$(sql_escape "$session_id")
-
-    tests_passing=$(sql_exec "
-        SELECT COALESCE(
-            json_extract(details, '$.tests_passed'),
-            0
-        )
-        FROM gate_results
-        WHERE session_id = '$esc_sync_sid' AND gate = 'tests'
-        ORDER BY timestamp DESC LIMIT 1;
-    " 2>/dev/null || echo "0")
-
-    tests_failing=$(sql_exec "
-        SELECT COALESCE(
-            json_extract(details, '$.tests_failed'),
-            0
-        )
-        FROM gate_results
-        WHERE session_id = '$esc_sync_sid' AND gate = 'tests'
-        ORDER BY timestamp DESC LIMIT 1;
-    " 2>/dev/null || echo "0")
-
-    # Get current iteration
-    local current_iteration
-    current_iteration=$(sql_exec "SELECT current_iteration FROM sessions WHERE id = '$esc_sync_sid';" 2>/dev/null || echo "0")
-
-    # Get last commit
-    local last_commit
-    last_commit=$(git rev-parse --short HEAD 2>/dev/null || echo "")
-
-    # Read progress file content
-    local summary_text=""
-    if [ -f "$DEVTEAM_PROGRESS_FILE" ]; then
-        summary_text=$(cat "$DEVTEAM_PROGRESS_FILE")
-    fi
-
-    # Escape for SQL using sql_escape()
-    local esc_summary esc_session_id esc_last_commit
-    esc_summary=$(sql_escape "$summary_text")
-    esc_session_id=$(sql_escape "$session_id")
-    esc_last_commit=$(sql_escape "$last_commit")
-
-    # Insert progress summary atomically
-    sql_exec "
-        BEGIN;
-        INSERT INTO progress_summaries (
-            session_id,
-            summary_text,
-            from_iteration,
-            to_iteration,
-            tasks_completed,
-            tasks_remaining,
-            tests_passing,
-            tests_failing,
-            features_passing,
-            features_total,
-            last_commit_sha
-        ) VALUES (
-            '$esc_session_id',
-            '$esc_summary',
-            ${current_iteration:-0},
-            ${current_iteration:-0},
-            $passing_features,
-            $remaining,
-            ${tests_passing:-0},
-            ${tests_failing:-0},
-            $passing_features,
-            $total_features,
-            '$esc_last_commit'
-        );
-        COMMIT;
-    " 2>/dev/null
-
-    log_info "Progress synced to database" "progress"
-}
 
 # ============================================================================
 # INITIALIZATION
@@ -530,6 +417,9 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
         generate)
             generate_progress_summary "${2:-}"
             ;;
+        sync)
+            log_info "Progress is file-based; use generate to update" "progress"
+            ;;
         mark-passing)
             mark_feature_passing "${2:-}"
             ;;
@@ -540,7 +430,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             get_feature_status "${2:-}"
             ;;
         sync)
-            sync_progress_to_db "${2:-}"
+            log_info "Progress is file-based; use generate to update" "progress"
             ;;
         init)
             initialize_features_json "${2:-}"

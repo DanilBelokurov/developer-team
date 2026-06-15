@@ -669,8 +669,7 @@ cp -r .devteam/state .devteam/state.backup-$(date +%Y%m%d)
 **Симптом**: scope-проверки, persistence, stop-hook не работают.
 
 **Решение**:
-1. Проверьте, что в `~/.qwen/settings.json` (или
-   `.qwen/settings.json` при `--scope=project`) есть ключ `hooks`
+1. Проверьте, что в `~/.qwen/settings.json` есть ключ `hooks`
 2. Проверьте, что sentinel-файл существует:
    `ls ~/.qwen/.devteam-installed`
 3. Перезапустите install: `bash install.sh`

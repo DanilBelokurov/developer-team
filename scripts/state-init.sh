@@ -13,11 +13,11 @@ PLUGIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="${1:-$(pwd)}"
 STATE_DIR="${ROOT}/.devteam/state"
 
-# Colors
-readonly COLOR_GREEN='\033[0;32m'
-readonly COLOR_YELLOW='\033[1;33m'
-readonly COLOR_RED='\033[0;31m'
-readonly COLOR_NC='\033[0m'
+# Colors (declare only if not already set by common.sh)
+[[ -z "${COLOR_GREEN:-}" ]] && readonly COLOR_GREEN='\033[0;32m'
+[[ -z "${COLOR_YELLOW:-}" ]] && readonly COLOR_YELLOW='\033[1;33m'
+[[ -z "${COLOR_RED:-}" ]] && readonly COLOR_RED='\033[0;31m'
+[[ -z "${COLOR_NC:-}" ]] && readonly COLOR_NC='\033[0m'
 
 log_info()  { echo -e "${COLOR_GREEN}[devteam]${COLOR_NC} $1"; }
 log_warn()  { echo -e "${COLOR_YELLOW}[devteam]${COLOR_NC} $1"; }

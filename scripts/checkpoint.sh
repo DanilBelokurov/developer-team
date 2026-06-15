@@ -9,8 +9,8 @@ source "${SCRIPT_DIR}/lib/common.sh"
 
 PROJECT_ROOT="${PROJECT_ROOT:-$(pwd)}"
 DEVTEAM_DIR="${PROJECT_ROOT}/.devteam"
-DB_FILE="${DEVTEAM_DIR}/devteam.db"
 CHECKPOINT_DIR="${DEVTEAM_DIR}/checkpoints"
+CHECKPOINT_LOG="${DEVTEAM_DIR}/checkpoint-log.json"
 
 # Register temp file cleanup
 setup_temp_cleanup
@@ -76,10 +76,10 @@ create_checkpoint() {
         log_info "Stashed uncommitted changes"
     fi
 
-    # 2. Save database state
-    if [[ -f "$DB_FILE" ]]; then
-        log_info "Saving database state..."
-        cp "$DB_FILE" "${checkpoint_path}/devteam.db"
+    # 2. Save state directory (file-based)
+    if [[ -d "${DEVTEAM_DIR}/state" ]]; then
+        log_info "Saving state directory..."
+        cp -r "${DEVTEAM_DIR}/state" "${checkpoint_path}/state"
     fi
 
     # 3. Save features.json if exists
@@ -99,8 +99,10 @@ create_checkpoint() {
     local context_file="${checkpoint_path}/context.json"
     local ctx_phase
     ctx_phase=$(cat "${DEVTEAM_DIR}/current-phase" 2>/dev/null || echo 'unknown')
-    local ctx_active_task
-    ctx_active_task=$(sql_exec "SELECT id FROM tasks WHERE status='in_progress' LIMIT 1;" 2>/dev/null || echo 'none')
+    local ctx_active_task='none'
+    if [ -d "${DEVTEAM_DIR}/state/tasks" ]; then
+        ctx_active_task=$(grep -rl 'status: in_progress' "${DEVTEAM_DIR}/state/tasks" 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo 'none')
+    fi
     local ctx_active_sprint='none'
 
     local esc_checkpoint_id esc_description esc_project_root esc_user esc_hostname esc_shell esc_phase esc_task esc_sprint
@@ -154,7 +156,7 @@ EOF
     "created_at": "${esc_manifest_ts}",
     "files": [
         "git-state.json",
-        "devteam.db",
+        "state/",
         "features.json",
         "progress.txt",
         "context.json"
@@ -163,15 +165,25 @@ EOF
 }
 EOF
 
-    # 8. Record in database
-    if [[ -f "$DB_FILE" ]]; then
-        local sql_ckpt_id sql_ckpt_path sql_description sql_git_commit
-        sql_ckpt_id=$(sql_escape "$checkpoint_id")
-        sql_ckpt_path=$(sql_escape "$checkpoint_path")
-        sql_description=$(sql_escape "$description")
-        sql_git_commit=$(sql_escape "$(git rev-parse HEAD 2>/dev/null || echo 'unknown')")
+    # 8. Record in checkpoint log
+    mkdir -p "$DEVTEAM_DIR"
+    local git_commit_hash
+    git_commit_hash=$(git rev-parse HEAD 2>/dev/null || echo 'unknown')
+    local log_entry
+    log_entry=$(json_object \
+        "checkpoint_id" "$checkpoint_id" \
+        "path" "$checkpoint_path" \
+        "description" "$description" \
+        "git_commit" "$git_commit_hash" \
+        "created_at" "$(date -Iseconds)")
 
-        sql_exec "INSERT INTO checkpoints (checkpoint_id, path, description, git_commit, created_at) VALUES ('${sql_ckpt_id}', '${sql_ckpt_path}', '${sql_description}', '${sql_git_commit}', datetime('now'));" > /dev/null
+    if [[ ! -f "$CHECKPOINT_LOG" ]]; then
+        echo "[$log_entry]" > "$CHECKPOINT_LOG"
+    else
+        local tmp_log
+        tmp_log=$(safe_mktemp)
+        sed '$ s/]$/,/' "$CHECKPOINT_LOG" > "$tmp_log" && mv "$tmp_log" "$CHECKPOINT_LOG"
+        echo "$log_entry]" >> "$CHECKPOINT_LOG"
     fi
 
     log_info "Checkpoint created: ${checkpoint_id}"
@@ -280,13 +292,10 @@ restore_checkpoint() {
         fi
     fi
 
-    # 3. Restore database (check both old and new naming)
-    if [[ -f "${checkpoint_path}/devteam.db" ]]; then
-        log_info "Restoring database..."
-        cp "${checkpoint_path}/devteam.db" "$DB_FILE"
-    elif [[ -f "${checkpoint_path}/state.db" ]]; then
-        log_info "Restoring database (legacy checkpoint)..."
-        cp "${checkpoint_path}/state.db" "$DB_FILE"
+    # 3. Restore state directory (checkpoints store full state snapshot)
+    if [[ -d "${checkpoint_path}/state" ]]; then
+        log_info "Restoring state directory..."
+        cp -r "${checkpoint_path}/state" "${DEVTEAM_DIR}/state"
     fi
 
     # 4. Restore features.json
@@ -314,12 +323,23 @@ restore_checkpoint() {
         fi
     fi
 
-    # Record restoration
-    if [[ -f "$DB_FILE" ]]; then
-        local sql_ckpt_id
-        sql_ckpt_id=$(sql_escape "$checkpoint_id")
-        sql_exec "INSERT INTO checkpoint_restores (checkpoint_id, restored_at) VALUES ('${sql_ckpt_id}', datetime('now'));" > /dev/null
+    # Record restoration in log
+    mkdir -p "$DEVTEAM_DIR"
+    local restore_entry
+    restore_entry=$(json_object \
+        "checkpoint_id" "$checkpoint_id" \
+        "type" "restore" \
+        "restored_at" "$(date -Iseconds)")
+
+    if [[ ! -f "$CHECKPOINT_LOG" ]]; then
+        echo "[$restore_entry]" > "$CHECKPOINT_LOG"
+    else
+        local tmp_log
+        tmp_log=$(safe_mktemp)
+        sed '$ s/]$/,/' "$CHECKPOINT_LOG" > "$tmp_log" && mv "$tmp_log" "$CHECKPOINT_LOG"
+        echo "$restore_entry]" >> "$CHECKPOINT_LOG"
     fi
+    log_info "Restore recorded: $checkpoint_id"
 
     log_info "Checkpoint restored: ${checkpoint_id}"
     log_info "Session state has been recovered"
@@ -338,11 +358,11 @@ delete_checkpoint() {
     rm -rf "$checkpoint_path"
     log_info "Deleted checkpoint: ${checkpoint_id}"
 
-    # Update database
-    if [[ -f "$DB_FILE" ]]; then
-        local sql_ckpt_id
-        sql_ckpt_id=$(sql_escape "$checkpoint_id")
-        sql_exec "DELETE FROM checkpoints WHERE checkpoint_id='${sql_ckpt_id}';" > /dev/null
+    # Remove from checkpoint log
+    if [[ -f "$CHECKPOINT_LOG" ]] && command -v jq &>/dev/null; then
+        local tmp_log
+        tmp_log=$(safe_mktemp)
+        jq "map(select(.checkpoint_id != \"$checkpoint_id\"))" "$CHECKPOINT_LOG" > "$tmp_log" && mv "$tmp_log" "$CHECKPOINT_LOG"
     fi
 }
 

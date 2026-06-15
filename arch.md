@@ -147,8 +147,8 @@ within each stage.
     │                                            │
     │ git clone + git submodule update           │
     │ bash scripts/sync-kotlin-skills.sh          │
-    │ bash install.sh ─────────────────────► Run python3 lib/install-hooks.py
-    │                                            │   merge hooks into ~/.qwen/settings.json
+    │ bash install.sh ─────────────────────► Shell+JQ deep-merge hooks into ~/.qwen/settings.json
+    │                                            │   copy agents/commands/skills to ~/.qwen/
     │ qwen extensions link .  (or install .)     │   create sentinel ~/.qwen/.devteam-installed
     │                                            │
     │ Restart Qwen Code                          │
@@ -169,8 +169,8 @@ within each stage.
 - **`qwen-extension.json`** (24 lines) — manifest. `contextFileName: "QWEN.md"`.
 - **`QWEN.md`** (84 lines, English) — auto-loaded context for the model.
 - **`README.md`** (English) — user documentation.
-- **`install.sh` / `uninstall.sh`** — thin shell wrappers around
-  `lib/install-hooks.py`.
+- **`install.sh` / `uninstall.sh`** — self-contained shell scripts
+  (shell + jq, no Python).
 
 ---
 
@@ -366,13 +366,13 @@ Stage tracking (including HITL state added in v6.1) uses the existing
 dependency). Each `set_kv_state()` / `atomic_write()` creates a sidecar
 `<file>.lock` directory; mkdir returns EEXIST if already locked.
 
-### 4.7 Hook merger (`lib/install-hooks.py`)
+### 4.7 Hook installer (`install.sh`)
 
-Python script (stdlib only, no external deps). Reads
+Shell script (jq for JSON merge, no Python). Reads
 `hooks/hooks-config.json`, deep-merges into
-`~/.qwen/settings.json`, creates sentinel file
-`~/.qwen/.devteam-installed`. Idempotent. Preserves user hooks on
-uninstall.
+`~/.qwen/settings.json`, copies agents/commands/skills to
+`~/.qwen/`, creates sentinel `~/.qwen/.devteam-installed`.
+Idempotent. Preserves user hooks on uninstall.
 
 ---
 
@@ -786,13 +786,12 @@ devteam/
 ├── arch.md                     # This document
 ├── CHANGELOG.md                # 5.0.0 → 6.0.0
 ├── CONTRIBUTING.md             # Contributor guide
-├── install.sh / uninstall.sh   # Hooks installer
+├── install.sh / uninstall.sh   # Hooks installer (shell+jq)
 │
 ├── commands/devteam/           # 16 slash commands
 ├── skills/                     # 35 skills
 ├── agents/                     # 18 subagents (flat)
 ├── hooks/                      # 9 scripts + shim + config
-├── lib/install-hooks.py        # Python hook merger
 ├── scripts/
 │   ├── sync-kotlin-skills.sh   # vendor → skills sync
 │   ├── dry-run.sh              # Shell mirror of pipeline

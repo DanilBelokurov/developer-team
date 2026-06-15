@@ -9,7 +9,6 @@ source "${SCRIPT_DIR}/lib/common.sh"
 
 PROJECT_ROOT="${PROJECT_ROOT:-$(pwd)}"
 DEVTEAM_DIR="${PROJECT_ROOT}/.devteam"
-DB_FILE="${DEVTEAM_DIR}/devteam.db"
 ROLLBACK_LOG="${DEVTEAM_DIR}/rollback-log.json"
 
 # Force/yes flag for non-interactive usage
@@ -449,17 +448,6 @@ record_rollback() {
         sed '$ s/]$/,/' "$ROLLBACK_LOG" > "$tmp" && mv "$tmp" "$ROLLBACK_LOG"
         echo "$entry]" >> "$ROLLBACK_LOG"
     fi
-
-    # Record in database
-    if [[ -f "$DB_FILE" ]]; then
-        local sql_type sql_target sql_reason sql_from_commit
-        sql_type=$(sql_escape "$type")
-        sql_target=$(sql_escape "$target_commit")
-        sql_reason=$(sql_escape "$reason")
-        sql_from_commit=$(sql_escape "$from_commit")
-
-        sql_exec "INSERT INTO rollbacks (rollback_type, target_commit, reason, from_commit, rolled_back_at) VALUES ('${sql_type}', '${sql_target}', '${sql_reason}', '${sql_from_commit}', datetime('now'));" > /dev/null
-    fi
 }
 
 # Show rollback history
@@ -470,10 +458,12 @@ history() {
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
 
-    if [[ -f "$DB_FILE" ]]; then
-        sql_exec_table "SELECT rollback_type as type, substr(target_commit, 1, 8) as target, reason, datetime(rolled_back_at, 'localtime') as time FROM rollbacks ORDER BY rolled_back_at DESC LIMIT 20;"
-    elif [[ -f "$ROLLBACK_LOG" ]]; then
-        cat "$ROLLBACK_LOG" | python3 -m json.tool 2>/dev/null || cat "$ROLLBACK_LOG"
+    if [[ -f "$ROLLBACK_LOG" ]]; then
+        if command -v jq &>/dev/null; then
+            jq -r '.[] | "\(.timestamp // .created_at)  \(.type)  \(.target_commit[:8])  \(.reason)"' "$ROLLBACK_LOG" 2>/dev/null | tail -20
+        else
+            cat "$ROLLBACK_LOG" | python3 -m json.tool 2>/dev/null || cat "$ROLLBACK_LOG"
+        fi
     else
         echo "No rollback history found."
     fi

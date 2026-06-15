@@ -144,7 +144,7 @@ with a structured failure report.
 - Events: `.devteam/state/events/<date>-events.md` (append-only)
 - Plans: `.devteam/plans/<plan-id>/` (unchanged)
 - Stage tracking: `session_state` KV (stored as flat files)
-- Hooks: `~/.qwen/settings.json` (managed by `lib/install-hooks.py`)
+- Hooks: `~/.qwen/settings.json` (managed by `install.sh`, shell + jq)
 
 v6.1 used SQLite; v6.2 replaced with file-based state for zero
 external dependencies. See `scripts/state-structure.md` for full layout.

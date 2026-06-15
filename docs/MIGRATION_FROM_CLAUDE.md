@@ -38,7 +38,7 @@ The four worktree-related commands were consolidated into a single
 | `CLAUDE_SESSION_ID` | `QWEN_SESSION_ID` (new) | Set by Qwen Code in stdin |
 | `DEVTEAM_LOG_LEVEL` | (unchanged) | Read by `scripts/state.sh` |
 
-The `lib/install-hooks.py` merger is tolerant: scripts that read
+The `install.sh` hook merger is tolerant: scripts that read
 the legacy env-var names via `hooks/run-hook.sh` continue to work
 because the shim translates Qwen Code's stdin JSON to those vars.
 
@@ -79,7 +79,7 @@ frontmatter, restart.
 
 | Claude Code | Qwen Code |
 |---|---|
-| `hooks/hooks.json` (top-level) | `hooks/hooks-config.json` (fragment) merged into `~/.qwen/settings.json` via `lib/install-hooks.py` |
+| `hooks/hooks.json` (top-level) | `hooks/hooks-config.json` (fragment) merged into `~/.qwen/settings.json` via `install.sh` (shell + jq) |
 | `hooks/run-hook.js` (Node.js wrapper) | `hooks/run-hook.sh` (bash shim) |
 | Hook events: PreToolUse, PostToolUse, Stop, SubagentStart, SubagentStop, TaskCompleted, WorktreeCreate, WorktreeRemove, TeammateIdle, PreCompact, SessionStart, SessionEnd, Notification | Hook events: PreToolUse, PostToolUse, Stop, PreCompact, SessionStart, SessionEnd, Notification (Claude-specific events removed) |
 | Hook types: `command`, `prompt` (LLM), `http` | Same (Qwen Code supports all three) — but devteam uses only `command` |

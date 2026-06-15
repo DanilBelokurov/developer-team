@@ -9,7 +9,6 @@ source "${SCRIPT_DIR}/lib/common.sh"
 
 PROJECT_ROOT="${PROJECT_ROOT:-$(pwd)}"
 DEVTEAM_DIR="${PROJECT_ROOT}/.devteam"
-DB_FILE="${DEVTEAM_DIR}/devteam.db"
 COST_LOG="${DEVTEAM_DIR}/cost-log.json"
 
 # Register temp file cleanup
@@ -134,31 +133,6 @@ JSONEOF
         echo "$entry]" >> "$COST_LOG"
     fi
 
-    # Also record in database if available
-    if [[ -f "$DB_FILE" ]]; then
-        # Validate numeric values before SQL interpolation
-        if ! [[ "$input_tokens" =~ ^[0-9]+$ ]]; then
-            log_error "Invalid input_tokens value: $input_tokens" "cost"
-            return 1
-        fi
-        if ! [[ "$output_tokens" =~ ^[0-9]+$ ]]; then
-            log_error "Invalid output_tokens value: $output_tokens" "cost"
-            return 1
-        fi
-        if ! [[ "$cost" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
-            log_error "Invalid cost value: $cost" "cost"
-            return 1
-        fi
-
-        local sql_sid sql_tid sql_model sql_op
-        sql_sid=$(sql_escape "$session_id")
-        sql_tid=$(sql_escape "$task_id")
-        sql_model=$(sql_escape "$model")
-        sql_op=$(sql_escape "$operation")
-
-        sql_exec "INSERT INTO token_usage (session_id, task_id, model, input_tokens, output_tokens, cost_usd, operation, recorded_at) VALUES ('${sql_sid}', '${sql_tid}', '${sql_model}', ${input_tokens}, ${output_tokens}, ${cost}, '${sql_op}', datetime('now'));" > /dev/null
-    fi
-
     log_info "Recorded: ${input_tokens}+${output_tokens} tokens = \$${cost} (${model})"
 }
 
@@ -174,18 +148,15 @@ session_summary() {
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
 
-    if [[ -f "$DB_FILE" ]]; then
-        local sql_sid
-        sql_sid=$(sql_escape "$session_id")
-
+    if [[ -f "$COST_LOG" ]] && command -v jq &> /dev/null; then
         local total_input
-        total_input=$(sql_exec "SELECT COALESCE(SUM(input_tokens), 0) FROM token_usage WHERE session_id='${sql_sid}';" 2>/dev/null || echo 0)
+        total_input=$(jq --arg sid "$session_id" '[.[] | select(.session_id == $sid) | .input_tokens] | add // 0' "$COST_LOG")
         local total_output
-        total_output=$(sql_exec "SELECT COALESCE(SUM(output_tokens), 0) FROM token_usage WHERE session_id='${sql_sid}';" 2>/dev/null || echo 0)
+        total_output=$(jq --arg sid "$session_id" '[.[] | select(.session_id == $sid) | .output_tokens] | add // 0' "$COST_LOG")
         local total_cost
-        total_cost=$(sql_exec "SELECT COALESCE(SUM(cost_usd), 0) FROM token_usage WHERE session_id='${sql_sid}';" 2>/dev/null || echo 0)
+        total_cost=$(jq --arg sid "$session_id" '[.[] | select(.session_id == $sid) | .cost_usd] | add // 0' "$COST_LOG")
         local request_count
-        request_count=$(sql_exec "SELECT COUNT(*) FROM token_usage WHERE session_id='${sql_sid}';" 2>/dev/null || echo 0)
+        request_count=$(jq --arg sid "$session_id" '[.[] | select(.session_id == $sid)] | length' "$COST_LOG")
 
         printf "  %-25s %s\n" "Session ID:" "$session_id"
         printf "  %-25s %s\n" "API Requests:" "$request_count"
@@ -197,30 +168,22 @@ session_summary() {
         echo ""
         echo "By Model:"
         echo "─────────────────────────────────────────────────────────────"
-        sql_exec_table "SELECT model, COUNT(*) as requests, SUM(input_tokens) as input_tokens, SUM(output_tokens) as output_tokens, printf('%.4f', SUM(cost_usd)) as cost_usd FROM token_usage WHERE session_id='${sql_sid}' GROUP BY model ORDER BY SUM(cost_usd) DESC;"
+        jq --arg sid "$session_id" -r \
+            '[.[] | select(.session_id == $sid)] | group_by(.model) | .[] | "\(.[0].model)\t\(length)\t\([.[].input_tokens | add])\t\([.[].output_tokens | add])\t\$(\([.[].cost_usd | add] | . * 100 | floor / 100))"' \
+            "$COST_LOG" 2>/dev/null | while IFS=$'\t' read -r m count in out cost; do
+            printf "  %-20s %s %s %s %s\n" "$m" "$count reqs" "$(format_number "$in") in" "$(format_number "$out") out" "$cost"
+        done
 
         echo ""
         echo "By Operation:"
         echo "─────────────────────────────────────────────────────────────"
-        sql_exec_table "SELECT operation, COUNT(*) as count, SUM(input_tokens + output_tokens) as tokens, printf('%.4f', SUM(cost_usd)) as cost_usd FROM token_usage WHERE session_id='${sql_sid}' GROUP BY operation ORDER BY SUM(cost_usd) DESC LIMIT 10;"
+        jq --arg sid "$session_id" -r \
+            '[.[] | select(.session_id == $sid)] | group_by(.operation) | .[] | "\(.[0].operation)\t\(length)\t\([.[].total_tokens | add])\t\$(\([.[].cost_usd | add] | . * 100 | floor / 100))"' \
+            "$COST_LOG" 2>/dev/null | head -10 | while IFS=$'\t' read -r op count tokens cost; do
+            printf "  %-20s %s %s %s\n" "$op" "$count" "$(format_number "$tokens") tokens" "$cost"
+        done
     else
-        echo "No database found. Checking JSON log..."
-        if [[ -f "$COST_LOG" ]]; then
-            # Use jq if available, otherwise basic parsing
-            if command -v jq &> /dev/null; then
-                local total_cost
-                total_cost=$(jq --arg sid "$session_id" '[.[] | select(.session_id == $sid) | .cost_usd] | add // 0' "$COST_LOG")
-                local total_tokens
-                total_tokens=$(jq --arg sid "$session_id" '[.[] | select(.session_id == $sid) | .total_tokens] | add // 0' "$COST_LOG")
-                echo "  Total Tokens: ${total_tokens}"
-                echo "  Total Cost: \$${total_cost}"
-            else
-                echo "  (Install jq for detailed JSON analysis)"
-                grep -c "\"session_id\": \"${session_id}\"" "$COST_LOG" 2>/dev/null || echo "  No data for session"
-            fi
-        else
-            echo "No cost data found."
-        fi
+        echo "No cost log found or jq not available."
     fi
     echo ""
 }
@@ -237,19 +200,22 @@ daily_summary() {
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
 
-    if [[ -f "$DB_FILE" ]]; then
-        local sql_date
-        sql_date=$(sql_escape "$date")
-
-        sql_exec_table "SELECT session_id, COUNT(*) as requests, SUM(input_tokens) as input_tokens, SUM(output_tokens) as output_tokens, printf('\$%.4f', SUM(cost_usd)) as total_cost FROM token_usage WHERE date(recorded_at) = '${sql_date}' GROUP BY session_id ORDER BY SUM(cost_usd) DESC;"
+    if [[ -f "$COST_LOG" ]] && command -v jq &> /dev/null; then
+        jq --arg d "$date" -r \
+            '[.[] | select(.timestamp | startswith($d))] |
+             group_by(.session_id) |
+             .[] | "\(.[0].session_id)\t\(length)\t\([.[].input_tokens | add])\t\([.[].output_tokens | add])\t\([.[].cost_usd | add] | . * 100 | floor / 100)"' \
+            "$COST_LOG" 2>/dev/null | while IFS=$'\t' read -r sid count in out cost; do
+            printf "  %-20s %s %s %s %s\n" "$sid" "$count reqs" "$(format_number "$in") in" "$(format_number "$out") out" "\$$cost"
+        done
 
         echo ""
         echo "─────────────────────────────────────────────────────────────"
         local day_total
-        day_total=$(sql_exec "SELECT printf('\$%.4f', COALESCE(SUM(cost_usd), 0)) FROM token_usage WHERE date(recorded_at)='${sql_date}';")
-        echo "Daily Total: ${day_total}"
+        day_total=$(jq --arg d "$date" '[.[] | select(.timestamp | startswith($d)) | .cost_usd] | add // 0' "$COST_LOG")
+        echo "Daily Total: \$${day_total}"
     else
-        echo "No database found."
+        echo "No cost log found or jq not available."
     fi
     echo ""
 }
@@ -264,17 +230,17 @@ total_summary() {
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
 
-    if [[ -f "$DB_FILE" ]]; then
+    if [[ -f "$COST_LOG" ]] && command -v jq &> /dev/null; then
         local total_input
-        total_input=$(sql_exec "SELECT COALESCE(SUM(input_tokens), 0) FROM token_usage;" 2>/dev/null || echo 0)
+        total_input=$(jq '[.[] | .input_tokens] | add // 0' "$COST_LOG")
         local total_output
-        total_output=$(sql_exec "SELECT COALESCE(SUM(output_tokens), 0) FROM token_usage;" 2>/dev/null || echo 0)
+        total_output=$(jq '[.[] | .output_tokens] | add // 0' "$COST_LOG")
         local total_cost
-        total_cost=$(sql_exec "SELECT COALESCE(SUM(cost_usd), 0) FROM token_usage;" 2>/dev/null || echo 0)
+        total_cost=$(jq '[.[] | .cost_usd] | add // 0' "$COST_LOG")
         local request_count
-        request_count=$(sql_exec "SELECT COUNT(*) FROM token_usage;" 2>/dev/null || echo 0)
+        request_count=$(jq '[.[] | .total_tokens] | length' "$COST_LOG")
         local session_count
-        session_count=$(sql_exec "SELECT COUNT(DISTINCT session_id) FROM token_usage;" 2>/dev/null || echo 0)
+        session_count=$(jq '[.[] | .session_id] | unique | length' "$COST_LOG")
 
         printf "  %-25s %s\n" "Total Sessions:" "$session_count"
         printf "  %-25s %s\n" "Total API Requests:" "$(format_number "$request_count")"
@@ -286,14 +252,26 @@ total_summary() {
         echo ""
         echo "By Day (Last 7 Days):"
         echo "─────────────────────────────────────────────────────────────"
-        sql_exec_table "SELECT date(recorded_at) as date, COUNT(*) as requests, SUM(input_tokens + output_tokens) as tokens, printf('\$%.4f', SUM(cost_usd)) as cost FROM token_usage WHERE recorded_at >= date('now', '-7 days') GROUP BY date(recorded_at) ORDER BY date(recorded_at) DESC;"
+        local seven_days_ago
+        seven_days_ago=$(date -I -d "7 days ago" 2>/dev/null || date -v-7d +%Y-%m-%d)
+        jq --arg since "$seven_days_ago" -r \
+            '[.[] | select(.timestamp >= $since)] |
+             group_by(.timestamp[:10]) | .[] |
+             "\(.[0].timestamp[:10])\t\(length)\t\([.[].total_tokens | add])\t\([.[].cost_usd | add] | . * 100 | floor / 100)"' \
+            "$COST_LOG" 2>/dev/null | while IFS=$'\t' read -r d count tokens cost; do
+            printf "  %-12s %s %s %s\n" "$d" "$count reqs" "$(format_number "$tokens") tokens" "\$$cost"
+        done
 
         echo ""
         echo "By Model (All Time):"
         echo "─────────────────────────────────────────────────────────────"
-        sql_exec_table "SELECT model, COUNT(*) as requests, SUM(input_tokens + output_tokens) as tokens, printf('\$%.4f', SUM(cost_usd)) as cost FROM token_usage GROUP BY model ORDER BY SUM(cost_usd) DESC;"
+        jq -r \
+            '[.[] | group_by(.model) | .[] | "\(.[0].model)\t\(length)\t\([.[].total_tokens | add])\t\([.[].cost_usd | add] | . * 100 | floor / 100)"] | .[]' \
+            "$COST_LOG" 2>/dev/null | while IFS=$'\t' read -r m count tokens cost; do
+            printf "  %-20s %s %s %s\n" "$m" "$count reqs" "$(format_number "$tokens") tokens" "\$$cost"
+        done
     else
-        echo "No database found."
+        echo "No cost log found or jq not available."
     fi
     echo ""
 }
@@ -343,50 +321,47 @@ check_budget() {
         return 0
     fi
 
-    if [[ -f "$DB_FILE" ]]; then
-        local sql_sid
-        sql_sid=$(sql_escape "$session_id")
-
+    if [[ -f "$COST_LOG" ]] && command -v jq &> /dev/null; then
+        local today
+        today=$(date +%Y-%m-%d)
         local session_cost
-        session_cost=$(sql_exec "SELECT COALESCE(SUM(cost_usd), 0) FROM token_usage WHERE session_id='${sql_sid}';" 2>/dev/null || echo 0)
+        session_cost=$(jq --arg sid "$session_id" '[.[] | select(.session_id == $sid) | .cost_usd] | add // 0' "$COST_LOG")
         local daily_cost
-        daily_cost=$(sql_exec "SELECT COALESCE(SUM(cost_usd), 0) FROM token_usage WHERE date(recorded_at) = date('now');" 2>/dev/null || echo 0)
+        daily_cost=$(jq --arg d "$today" '[.[] | select(.timestamp | startswith($d)) | .cost_usd] | add // 0' "$COST_LOG")
 
-        if command -v jq &> /dev/null; then
-            local session_budget
-            session_budget=$(jq -r ".session // 0" "$budget_file")
-            local daily_budget
-            daily_budget=$(jq -r ".daily // 0" "$budget_file")
+        local session_budget
+        session_budget=$(jq -r ".session // 0" "$budget_file")
+        local daily_budget
+        daily_budget=$(jq -r ".daily // 0" "$budget_file")
 
-            echo ""
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo " Budget Status"
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo ""
+        echo ""
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo " Budget Status"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo ""
 
-            if [[ "$session_budget" != "0" ]]; then
-                local session_pct
-                session_pct=$(echo "scale=1; $session_cost / $session_budget * 100" | bc)
-                printf "  Session: \$%.4f / \$%.2f (%s%%)\n" "$session_cost" "$session_budget" "$session_pct"
-                if (( $(echo "$session_cost > $session_budget" | bc -l) )); then
-                    log_warn "⚠️  SESSION BUDGET EXCEEDED!"
-                elif (( $(echo "$session_cost > $session_budget * 0.8" | bc -l) )); then
-                    log_warn "Session at 80%+ of budget"
-                fi
+        if [[ "$session_budget" != "0" ]]; then
+            local session_pct
+            session_pct=$(echo "scale=1; $session_cost / $session_budget * 100" | bc)
+            printf "  Session: \$%.4f / \$%.2f (%s%%)\n" "$session_cost" "$session_budget" "$session_pct"
+            if (( $(echo "$session_cost > $session_budget" | bc -l) )); then
+                log_warn "⚠️  SESSION BUDGET EXCEEDED!"
+            elif (( $(echo "$session_cost > $session_budget * 0.8" | bc -l) )); then
+                log_warn "Session at 80%+ of budget"
             fi
-
-            if [[ "$daily_budget" != "0" ]]; then
-                local daily_pct
-                daily_pct=$(echo "scale=1; $daily_cost / $daily_budget * 100" | bc)
-                printf "  Daily:   \$%.4f / \$%.2f (%s%%)\n" "$daily_cost" "$daily_budget" "$daily_pct"
-                if (( $(echo "$daily_cost > $daily_budget" | bc -l) )); then
-                    log_warn "⚠️  DAILY BUDGET EXCEEDED!"
-                elif (( $(echo "$daily_cost > $daily_budget * 0.8" | bc -l) )); then
-                    log_warn "Daily at 80%+ of budget"
-                fi
-            fi
-            echo ""
         fi
+
+        if [[ "$daily_budget" != "0" ]]; then
+            local daily_pct
+            daily_pct=$(echo "scale=1; $daily_cost / $daily_budget * 100" | bc)
+            printf "  Daily:   \$%.4f / \$%.2f (%s%%)\n" "$daily_cost" "$daily_budget" "$daily_pct"
+            if (( $(echo "$daily_cost > $daily_budget" | bc -l) )); then
+                log_warn "⚠️  DAILY BUDGET EXCEEDED!"
+            elif (( $(echo "$daily_cost > $daily_budget * 0.8" | bc -l) )); then
+                log_warn "Daily at 80%+ of budget"
+            fi
+        fi
+        echo ""
     fi
 }
 
@@ -396,11 +371,12 @@ export_csv() {
 
     ensure_dirs
 
-    if [[ -f "$DB_FILE" ]]; then
-        sqlite3 -csv -header "$DB_FILE" "PRAGMA foreign_keys = ON; SELECT * FROM token_usage ORDER BY recorded_at DESC;" > "$output"
+    if [[ -f "$COST_LOG" ]] && command -v jq &> /dev/null; then
+        jq -r '["timestamp", "session_id", "task_id", "model", "input_tokens", "output_tokens", "total_tokens", "cost_usd", "operation"] |
+               (.[0] | map(length) | @csv), (.[] | [to_entries[] | .value | tostring] | @csv)' "$COST_LOG" > "$output"
         log_info "Exported to ${output}"
     else
-        log_error "No database found"
+        log_error "No cost log found or jq not available"
     fi
 }
 

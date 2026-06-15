@@ -96,17 +96,21 @@ else
     jq --argjson newcfg "$(cat "$CONFIG_FILE")" '
       def deep_merge($a; $b):
         if ($a | type) == "object" and ($b | type) == "object" then
-          $a | to_entries | map(
-            if ($b[.key] | type) == "object" then
-              {key: .key, value: deep_merge(.value; $b[.key])}
+          ($a | keys) as $akeys | ($b | keys) as $bkeys |
+          ($akeys + $bkeys | unique) as $allkeys |
+          $allkeys | map(
+            . as $k |
+            if ($a | has($k)) and ($b | has($k)) then
+              {key: $k, value: deep_merge($a[$k]; $b[$k])}
+            elif ($a | has($k)) then
+              {key: $k, value: $a[$k]}
             else
-              {key: .key, value: ($b[.key] // .value)}
+              {key: $k, value: $b[$k]}
             end
           ) | from_entries
         else
           ($b // $a)
         end;
-
       deep_merge(.; $newcfg)
     ' "$QWEN_SETTINGS" > "$tmp_file"
 
