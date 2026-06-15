@@ -22,18 +22,18 @@ These hooks integrate with Qwen Code's hook system to provide:
 
 When DevTeam is installed as a Qwen Code extension (via
 `qwen extensions install .` or `qwen extensions link .`), all hooks
-are configured automatically through `hooks/hooks-config.json` →
-merged into `~/.qwen/settings.json` by `../install.sh`.
+are configured automatically — they're defined in `qwen-extension.json`
+under `settings.hooks`.
 
 ```bash
-# Install
+# Prerequisites check + state init
 bash ../install.sh
+
+# Install as extension (hooks, agents, commands, skills included)
+qwen extensions install .
 
 # Or for dev workflow (live symlink)
 qwen extensions link .
-
-# Or one-shot
-qwen extensions install .
 ```
 
 All hook paths use `$QWEN_PROJECT_DIR` (Qwen Code resolves this
@@ -80,9 +80,8 @@ Qwen Code passes hook input as JSON via stdin. The shim at
 
 ## Configuration
 
-`hooks-config.json` is the source of truth for which events fire
-which scripts. Merged into `~/.qwen/settings.json` by `../install.sh`.
-The merged config is idempotent: re-running `bash ../install.sh` is a no-op.
+Hook configuration is in `qwen-extension.json` under `settings.hooks`.
+No manual merge needed — `qwen extensions install .` handles everything.
 
 ## Troubleshooting
 

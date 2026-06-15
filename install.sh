@@ -1,13 +1,10 @@
 #!/bin/bash
 # DevTeam Qwen Code extension installer.
-# Installs hooks into ~/.qwen/settings.json and copies agents/commands/skills to ~/.qwen/.
+# Installs via 'qwen extensions install .' (hooks/settings in qwen-extension.json)
+# This script: prerequisites check + state initialization only.
 set -euo pipefail
 
 PLUGIN_DIR="$(cd "$(dirname "$0")" && pwd)"
-SCRIPT_DIR="${PLUGIN_DIR}/hooks"
-CONFIG_FILE="${PLUGIN_DIR}/hooks/hooks-config.json"
-QWEN_SETTINGS="${HOME}/.qwen/settings.json"
-SENTINEL="${HOME}/.qwen/.devteam-installed"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -43,15 +40,6 @@ JQ_VERSION=$(jq --version)
 log_info "prerequisites OK (git, python${PYTHON_VERSION}, jq ${JQ_VERSION})"
 
 # ============================================================================
-# IDEMPOTENCY CHECK
-# ============================================================================
-
-if [ -f "$SENTINEL" ]; then
-    log_info "already installed — run 'bash uninstall.sh' first to reinstall"
-    exit 0
-fi
-
-# ============================================================================
 # MCP SERVER PREREQUISITES (warn-only)
 # ============================================================================
 
@@ -71,79 +59,6 @@ else
 fi
 
 # ============================================================================
-# ENSURE ~/.qwen EXISTS
-# ============================================================================
-
-mkdir -p "${HOME}/.qwen"
-
-# ============================================================================
-# MERGE HOOKS INTO settings.json
-# ============================================================================
-
-echo ""
-echo "Installing hooks into ${QWEN_SETTINGS}..."
-
-if [ ! -f "$QWEN_SETTINGS" ]; then
-    # No existing config — just write hooks
-    cp "$CONFIG_FILE" "$QWEN_SETTINGS"
-    log_info "created ${QWEN_SETTINGS}"
-else
-    # Deep-merge: keep existing settings, add/merge hooks
-    # Custom jq merge: existing hooks + new hooks, existing keys preserved
-    tmp_file="$(mktemp)"
-    trap "rm -f '$tmp_file'" EXIT
-
-    jq --argjson newcfg "$(cat "$CONFIG_FILE")" '
-      def deep_merge($a; $b):
-        if ($a | type) == "object" and ($b | type) == "object" then
-          ($a | keys) as $akeys | ($b | keys) as $bkeys |
-          ($akeys + $bkeys | unique) as $allkeys |
-          $allkeys | map(
-            . as $k |
-            if ($a | has($k)) and ($b | has($k)) then
-              {key: $k, value: deep_merge($a[$k]; $b[$k])}
-            elif ($a | has($k)) then
-              {key: $k, value: $a[$k]}
-            else
-              {key: $k, value: $b[$k]}
-            end
-          ) | from_entries
-        else
-          ($b // $a)
-        end;
-      deep_merge(.; $newcfg)
-    ' "$QWEN_SETTINGS" > "$tmp_file"
-
-    mv "$tmp_file" "$QWEN_SETTINGS"
-    log_info "merged hooks into ${QWEN_SETTINGS}"
-fi
-
-# ============================================================================
-# COPY agents/, commands/, skills/ TO ~/.qwen/
-# ============================================================================
-
-echo ""
-echo "Copying agents/, commands/, skills/ to ~/.qwen/..."
-
-for dir in agents commands skills; do
-    if [ -d "${PLUGIN_DIR}/${dir}" ]; then
-        rm -rf "${HOME}/.qwen/${dir}"
-        cp -r "${PLUGIN_DIR}/${dir}" "${HOME}/.qwen/${dir}"
-        count=$(find "${HOME}/.qwen/${dir}" -name '*.md' | wc -l | tr -d ' ')
-        log_info "  ${dir}/ — ${count} files"
-    fi
-done
-
-# ============================================================================
-# CREATE SENTINEL
-# ============================================================================
-
-echo ""
-echo "Creating sentinel..."
-date > "$SENTINEL"
-log_info "created ${SENTINEL}"
-
-# ============================================================================
 # INITIALIZE STATE (v6.2 — file-based)
 # ============================================================================
 
@@ -158,14 +73,7 @@ bash "${PLUGIN_DIR}/scripts/state-init.sh"
 echo ""
 echo "Installation complete!"
 echo ""
-echo "  Hooks:    ${QWEN_SETTINGS}"
-echo "  Agents:   ${HOME}/.qwen/agents/    ($(find "${HOME}/.qwen/agents" -name '*.md' 2>/dev/null | wc -l | tr -d ' ') files)"
-echo "  Commands: ${HOME}/.qwen/commands/   ($(find "${HOME}/.qwen/commands" -name '*.md' 2>/dev/null | wc -l | tr -d ' ') files)"
-echo "  Skills:   ${HOME}/.qwen/skills/     ($(find "${HOME}/.qwen/skills" -name '*.md' 2>/dev/null | wc -l | tr -d ' ') files)"
-echo ""
 echo "Next steps:"
-echo "  1. Restart Qwen Code to load the extension"
-echo "  2. Verify: /skills (should show devteam skills)"
-echo "  3. Verify: /agents manage (should show subagents)"
-echo "  4. Verify: /devteam:status"
-echo "  5. (Optional) Set GITHUB_TOKEN for GitHub MCP integration"
+echo "  1. qwen extensions install ."
+echo "  2. Restart Qwen Code to load the extension"
+echo "  3. Verify: /devteam:status"

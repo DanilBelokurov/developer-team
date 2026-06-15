@@ -1,6 +1,6 @@
 {
   "name": "devteam",
-  "version": "6.0.0",
+  "version": "6.2.0",
   "description": "Kotlin + Spring backend 3-stage development pipeline (Analytics → Development → Testing) with parallel sub-stages. Integrates 25 skills from yalishevant/kotlin-backend-agent-skills via git submodule.",
   "mcpServers": {
     "github": {
