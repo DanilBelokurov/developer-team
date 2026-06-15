@@ -55,9 +55,9 @@ within each stage.
    parallelism). Quality gates (`kotlin-quality-gate-enforcer`)
    sit between stages.
 
-5. **Idempotent install.** Installing the extension into
-   `~/.qwen/settings.json` is idempotent via a sentinel file
-   `~/.qwen/.devteam-installed`.
+5. **Idempotent install.** Installing the extension is idempotent via a
+   sentinel file at `<target>/.devteam-installed`. Supports project-level
+   (`<project>/.qwen/`) and user-level (`~/.qwen/`) installs.
 
 6. **Upstream skill integration.** Skills from
    [yalishevant/kotlin-backend-agent-skills](https://github.com/yalishevant/kotlin-backend-agent-skills)
@@ -146,10 +146,14 @@ within each stage.
 [Developer]                                  [Qwen Code]
     │                                            │
     │ git clone + git submodule update           │
-    │ bash scripts/sync-kotlin-skills.sh          │
-    │ bash install.sh ─────────────────────► Shell+JQ deep-merge hooks into ~/.qwen/settings.json
-    │                                            │   copy agents/commands/skills to ~/.qwen/
-    │ qwen extensions link .  (or install .)     │   create sentinel ~/.qwen/.devteam-installed
+    │ bash scripts/sync-kotlin-skills.sh         │
+    │                                            │
+    │ bash install.sh [project-path] ──────────► copy agents/commands/skills/hooks to <target>
+    │                                            │ deep-merge hooks into <target>/settings.json
+    │                                            │ (absolute paths: <target>/hooks/run-hook.sh)
+    │                                            │ create sentinel <target>/.devteam-installed
+    │                                            │ (project-level: <project>/.qwen/;
+    │                                            │  user-level: ~/.qwen/)
     │                                            │
     │ Restart Qwen Code                          │
     │                                            │ Auto-load QWEN.md
@@ -163,6 +167,11 @@ within each stage.
     │                                            │ Read commands/devteam/build.md
     │                                            │ → orchestration logic
 ```
+
+**Target resolution:**
+- `bash install.sh /path/to/project` → `<project>/.qwen/`
+- `bash install.sh` inside git → `<cwd>/.qwen/`
+- `bash install.sh` outside git → `~/.qwen/`
 
 ### Files
 
@@ -368,11 +377,12 @@ dependency). Each `set_kv_state()` / `atomic_write()` creates a sidecar
 
 ### 4.7 Hook installer (`install.sh`)
 
-Shell script (jq for JSON merge, no Python). Reads
-`hooks/hooks-config.json`, deep-merges into
-`~/.qwen/settings.json`, copies agents/commands/skills to
-`~/.qwen/`, creates sentinel `~/.qwen/.devteam-installed`.
-Idempotent. Preserves user hooks on uninstall.
+Shell script (jq + perl for cross-platform path substitution, no Python).
+Accepts optional `project-path` argument. Copies agents/commands/skills/hooks
+to `<target>` (project-level `<project>/.qwen/` or user-level `~/.qwen/`),
+deep-merges `hooks/hooks-config.json` (with absolute paths) into
+`<target>/settings.json`, creates sentinel `<target>/.devteam-installed`.
+Idempotent. `uninstall.sh` mirrors target resolution and removes all artifacts.
 
 ---
 
@@ -772,7 +782,7 @@ documented KV convention.
 | **`--dry-run`** | Print dispatch sequence without invoking agents |
 | **`--skip-stage`** | Skip named stage(s) in the pipeline |
 | **`EXIT_SIGNAL`** | Marker in assistant message allowing Stop hook to exit |
-| **Sentinel file** | `~/.qwen/.devteam-installed` — file-based install state |
+| **Sentinel file** | `<target>/.devteam-installed` — file-based install state (project-level: `<project>/.qwen/`, user-level: `~/.qwen/`) |
 
 ---
 

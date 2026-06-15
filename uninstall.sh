@@ -1,72 +1,149 @@
 #!/bin/bash
 # DevTeam Qwen Code extension uninstaller.
-# Removes hooks from ~/.qwen/settings.json and agents/commands/skills from ~/.qwen/.
-# Does NOT remove the extension files themselves — use 'qwen extensions uninstall devteam' for that.
+# Removes DevTeam from the target .qwen/ directory.
+# Supports project-level (via project-path argument) and user-level (default) uninstall.
 set -euo pipefail
 
 PLUGIN_DIR="$(cd "$(dirname "$0")" && pwd)"
-QWEN_SETTINGS="${HOME}/.qwen/settings.json"
-SENTINEL="${HOME}/.qwen/.devteam-installed"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
 NC='\033[0m'
 
 log_info()  { echo -e "${GREEN}[devteam]${NC} $1"; }
+log_warn()  { echo -e "${YELLOW}[devteam]${NC} $1"; }
 log_error() { echo -e "${RED}[devteam]${NC} $1" >&2; }
 
-echo ""
-
 # ============================================================================
-# PREREQUISITES
+# USAGE
 # ============================================================================
 
-command -v jq >/dev/null 2>&1 || {
-    log_error "jq is required but not found"
-    exit 1
+usage() {
+    cat <<EOF
+Usage: bash uninstall.sh [project-path]
+
+Uninstalls DevTeam from the target .qwen/ directory.
+
+Arguments:
+  project-path    Optional path to a project. If provided, uninstalls from
+                  <project-path>/.qwen/. If omitted, auto-detects:
+                  - inside git repo: <cwd>/.qwen/
+                  - outside git repo: ~/.qwen/
+
+Examples:
+  bash uninstall.sh                        # user-level uninstall
+  bash uninstall.sh /path/to/myproject    # project-level uninstall
+EOF
 }
 
 # ============================================================================
-# REMOVE HOOKS FROM settings.json
+# RESOLVE TARGET DIRECTORY
 # ============================================================================
 
-if [ -f "$QWEN_SETTINGS" ]; then
-    if jq -e '.hooks' "$QWEN_SETTINGS" >/dev/null 2>&1; then
-        echo "Removing hooks from ${QWEN_SETTINGS}..."
-        tmp_file="$(mktemp)"
-        trap "rm -f '$tmp_file'" EXIT
+resolve_target() {
+    local arg_path="$1"
 
-        jq 'del(.hooks)' "$QWEN_SETTINGS" > "$tmp_file"
-        mv "$tmp_file" "$QWEN_SETTINGS"
-        log_info "removed hooks from ${QWEN_SETTINGS}"
-    else
-        echo "No hooks found in ${QWEN_SETTINGS} — skipping"
+    if [ -n "$arg_path" ]; then
+        echo "$(realpath "$arg_path")/.qwen"
+        return
     fi
-else
-    echo "settings.json not found — skipping hooks removal"
+
+    if git -C . rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        echo "$(pwd)/.qwen"
+        return
+    fi
+
+    echo "${HOME}/.qwen"
+}
+
+# ============================================================================
+# PARSE ARGUMENTS
+# ============================================================================
+
+PROJECT_PATH="${1:-}"
+
+if [ "${1:-}" == "--help" ] || [ "${1:-}" == "-h" ]; then
+    usage
+    exit 0
 fi
 
+TARGET="$(resolve_target "$PROJECT_PATH")"
+SENTINEL="${TARGET}/.devteam-installed"
+
 # ============================================================================
-# REMOVE agents/, commands/, skills/ FROM ~/.qwen/
+# IDEMPOTENCY CHECK
 # ============================================================================
 
-echo ""
-echo "Removing agents/, commands/, skills/ from ~/.qwen/..."
+if [ ! -f "$SENTINEL" ]; then
+    log_error "not installed at ${TARGET} — nothing to do"
+    log_info "Run 'bash install.sh${PROJECT_PATH:+ $PROJECT_PATH}' to install first"
+    exit 1
+fi
 
-for dir in agents commands skills; do
-    if [ -d "${HOME}/.qwen/${dir}" ]; then
-        rm -rf "${HOME}/.qwen/${dir}"
-        log_info "removed ${HOME}/.qwen/${dir}/"
-    fi
-done
+log_info "target: ${TARGET}"
 
 # ============================================================================
 # REMOVE SENTINEL
 # ============================================================================
 
-if [ -f "$SENTINEL" ]; then
-    rm -f "$SENTINEL"
-    log_info "removed ${SENTINEL}"
+echo ""
+echo "Removing sentinel..."
+rm -f "$SENTINEL"
+log_info "removed ${SENTINEL}"
+
+# ============================================================================
+# REMOVE agents/, commands/, skills/, hooks/
+# ============================================================================
+
+echo ""
+echo "Removing DevTeam files..."
+for dir in agents commands skills hooks; do
+    if [ -d "${TARGET}/${dir}" ]; then
+        rm -rf "${TARGET}/${dir}"
+        log_info "  removed ${TARGET}/${dir}/"
+    fi
+done
+
+# ============================================================================
+# REMOVE devteam HOOKS FROM settings.json
+# ============================================================================
+
+if [ -f "${TARGET}/settings.json" ]; then
+    echo ""
+    echo "Cleaning hooks from ${TARGET}/settings.json..."
+    tmp_file="$(mktemp)"
+    trap "rm -f '$tmp_file'" EXIT
+
+    # Remove hooks key from settings.json
+    jq 'delpaths([["hooks"]]) // .' "${TARGET}/settings.json" > "$tmp_file" 2>/dev/null || cp "${TARGET}/settings.json" "$tmp_file"
+
+    # If result is empty object, remove settings.json entirely
+    if [ "$(cat "$tmp_file" | tr -d ' \n')" = "{}" ]; then
+        rm -f "${TARGET}/settings.json"
+        log_info "removed empty ${TARGET}/settings.json"
+    else
+        mv "$tmp_file" "${TARGET}/settings.json"
+        log_info "cleaned hooks from ${TARGET}/settings.json"
+    fi
+fi
+
+# ============================================================================
+# REMOVE .devteam/ STATE
+# ============================================================================
+
+# Project-level: .devteam/ is sibling to .qwen/ at project root
+# User-level: .devteam/ is inside .qwen/
+if [ -n "$PROJECT_PATH" ]; then
+    DEVTEAM_STATE="${PROJECT_PATH}/.devteam"
+else
+    DEVTEAM_STATE="${TARGET}/.devteam"
+fi
+if [ -d "$DEVTEAM_STATE" ]; then
+    echo ""
+    echo "Removing DevTeam state..."
+    rm -rf "$DEVTEAM_STATE"
+    log_info "removed ${DEVTEAM_STATE}/"
 fi
 
 # ============================================================================
@@ -74,8 +151,8 @@ fi
 # ============================================================================
 
 echo ""
-echo "Uninstall complete!"
-echo ""
-echo "Note: extension files at the install path were NOT removed."
-echo "Run 'qwen extensions uninstall devteam' to fully remove the extension."
-echo "Run 'qwen extensions disable devteam' to keep files but stop loading."
+log_info "Uninstall complete!"
+echo "  Target:   ${TARGET}"
+echo "  Sentinel: removed"
+echo "  Files:   removed"
+echo "  State:   removed"

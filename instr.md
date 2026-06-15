@@ -1,6 +1,6 @@
 # DevTeam для Qwen Code — Руководство пользователя
 
-**Версия**: 6.1.0 (пайплайн для Kotlin + Spring backend + HITL gate)
+**Версия**: 6.3.0 (пайплайн для Kotlin + Spring backend)
 **Аудитория**: пользователи (не разработчики) расширения DevTeam для Qwen Code
 **Время чтения**: ~20 минут полностью; ~5 минут только Quick Start
 
@@ -94,11 +94,21 @@ git submodule update --init --recursive
 bash scripts/sync-kotlin-skills.sh
 # Output: "Done. 25 skills"
 
-# 4. Устанавливаем хуки расширения
+# 4. Устанавливаем расширение (project-level или user-level)
+# Project-level (рекомендуется): в <project>/.qwen/ — изолирует от других проектов
+bash install.sh /path/to/your/project
+
+# User-level: в ~/.qwen/ — глобально для всех проектов без аргумента
 bash install.sh
 
 # 5. Перезапускаем Qwen Code
 ```
+
+**Project-level vs User-level:**
+- `bash install.sh /path/to/project` → устанавливает в `<project>/.qwen/`
+- `bash install.sh` (внутри git) → auto-detect: `<cwd>/.qwen/`
+- `bash install.sh` (вне git) → user-level: `~/.qwen/`
+
 
 ### Проверка
 
@@ -621,7 +631,12 @@ bash install.sh
 
 ### Skills/команды не появляются после установки
 
-(см. v5.0 troubleshooting) — перезапустите Qwen Code.
+**Решение**:
+1. Перезапустите Qwen Code
+2. Определите target установки:
+   - Project-level: `ls <project>/.qwen/.devteam-installed`
+   - User-level: `ls ~/.qwen/.devteam-installed`
+3. Перезапустите install: `bash install.sh` или `bash install.sh /path/to/project`
 
 ### Stage fail
 

@@ -409,3 +409,6 @@ docker-compose.*.local.yml
 
 # tests
 tests/**
+
+# auto-skills
+.qwen/skills/auto-*

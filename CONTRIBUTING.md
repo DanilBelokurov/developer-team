@@ -7,11 +7,20 @@ Thank you for your interest in contributing to DevTeam for Qwen Code.
 ```bash
 git clone https://github.com/michael-harris/devteam.git
 cd devteam
-bash install.sh
-qwen extensions link .   # for live development
+
+# Install the extension (project-level or user-level)
+# For live development: install into the devteam repo itself
+bash install.sh           # user-level
+# or project-level:
+bash install.sh /path/to/devteam
 ```
 
-Prerequisites: Python 3.7+, sqlite3, git, optional Node.js + npx for MCP servers.
+**Note**: For live development, install into the devteam directory itself:
+```bash
+bash install.sh "$(pwd)"
+```
+
+Prerequisites: Python 3.7+, jq, git, optional Node.js + npx for MCP servers.
 
 ## Project Structure
 
@@ -142,14 +151,20 @@ devteam/
 
 ```bash
 bash tests/run-tests.sh                                  # existing shell tests
-bash install.sh                                          # twice — second is no-op
+bash install.sh                                          # second run is no-op (idempotency)
+bash install.sh /tmp/dt-test                             # project-level test
+bash uninstall.sh /tmp/dt-test                           # clean up test install
 ```
 
 ## Pull Request Process
 
 1. Create a feature branch: `git checkout -b feature/<name>`
 2. Make your changes
-3. Run `bash install.sh` twice to verify hook merge idempotency
+3. Test install/uninstall cycle:
+   - `bash install.sh /tmp/dt-test` (project-level)
+   - `bash install.sh /tmp/dt-test` (idempotency — should skip)
+   - `bash uninstall.sh /tmp/dt-test` (clean removal)
+   - `rm -rf /tmp/dt-test`
 4. Commit with descriptive messages
 5. Open a PR
 

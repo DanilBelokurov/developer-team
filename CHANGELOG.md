@@ -2,6 +2,41 @@
 
 All notable changes to devteam are documented in this file.
 
+## [6.3.0] — 2026-06-15 — Project-level install
+
+### Added
+- **Project-level installation.** `install.sh [project-path]` installs
+  into `<project>/.qwen/` instead of `~/.qwen/`, isolating each project
+  from others.
+- **Auto-detection.** Without an argument, `install.sh` resolves target as:
+  - inside git repo → `<cwd>/.qwen/`
+  - outside git → `~/.qwen/`
+- **Sentinel at target level.** `<target>/.devteam-installed` stores
+  install timestamp + target path.
+- **`uninstall.sh [project-path]`** with matching target resolution
+  and clean removal of project-level state.
+
+### Changed
+- **`install.sh`** completely rewritten:
+  - accepts optional `project-path` argument
+  - uses `perl` instead of `sed` for cross-platform path substitution
+  - deep-merges hooks into `<target>/settings.json` with absolute paths
+  - idempotent (second run is no-op)
+- **`uninstall.sh`** rewritten with project-level target resolution
+  and removal of sibling `.devteam/` state for project-level installs
+- **`hooks/hooks-config.json`**: replaced `$QWEN_PROJECT_DIR` with
+  `__HOOK_BASE__` placeholder (substituted by install.sh with absolute path)
+
+### Fixed
+- macOS `sed` incompatibility with `/` in paths (switched to `perl`)
+- sentinel location ambiguity (now always inside target `.qwen/`)
+
+### Migration
+If upgrading from v6.2 with a user-level install:
+1. Old sentinel `~/.devteam-installed` is ignored — reinstall is safe
+2. Run `bash install.sh` to refresh hooks with absolute paths
+3. For project-level: `bash install.sh /path/to/project`
+
 ## [6.2.0] — 2026-06-14 — File-based state (no SQLite)
 
 ### Changed (BREAKING)

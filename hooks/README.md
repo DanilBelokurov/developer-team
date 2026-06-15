@@ -18,26 +18,27 @@ These hooks integrate with Qwen Code's hook system to provide:
 
 ## Quick Start
 
-### Qwen Code extension installation (recommended)
+### Installation (install.sh)
 
-When DevTeam is installed as a Qwen Code extension (via
-`qwen extensions install .` or `qwen extensions link .`), all hooks
-are configured automatically — they're defined in `qwen-extension.json`
-under `settings.hooks`.
+Hooks are installed via `install.sh`, which copies `agents/`, `commands/`,
+`skills/`, `hooks/` to the target `.qwen/` directory and deep-merges
+hook configuration into `settings.json`.
 
 ```bash
-# Prerequisites check + state init
-bash ../install.sh
+# Project-level (recommended): installs to <project>/.qwen/
+bash install.sh /path/to/your/project
 
-# Install as extension (hooks, agents, commands, skills included)
-qwen extensions install .
-
-# Or for dev workflow (live symlink)
-qwen extensions link .
+# User-level: installs to ~/.qwen/ (auto-detected if not in git repo)
+bash install.sh
 ```
 
-All hook paths use `$QWEN_PROJECT_DIR` (Qwen Code resolves this
-to the extension install directory).
+**Auto-detection**: If no path is given, install.sh resolves the target as:
+1. Inside a git repo → `<cwd>/.qwen/`
+2. Outside git → `~/.qwen/`
+
+**Absolute paths**: All hook commands in `settings.json` use absolute paths
+(`<target>/hooks/run-hook.sh`), so they work regardless of how Qwen Code
+was launched.
 
 ### Hook event reference
 
@@ -80,13 +81,15 @@ Qwen Code passes hook input as JSON via stdin. The shim at
 
 ## Configuration
 
-Hook configuration is in `qwen-extension.json` under `settings.hooks`.
-No manual merge needed — `qwen extensions install .` handles everything.
+`hooks-config.json` is the source of truth for which events fire
+which scripts. Merged into `~/.qwen/settings.json` by `../install.sh`.
+The merged config is idempotent: re-running `bash ../install.sh` is a no-op.
 
 ## Troubleshooting
 
-- Hooks don't fire? Check `~/.qwen/settings.json` has a `hooks` key
-  and `~/.qwen/.devteam-installed` sentinel exists
+- Hooks don't fire? Check `<target>/settings.json` has a `hooks` key
+  and `<target>/.devteam-installed` sentinel exists (project-level:
+  `<project>/.qwen/`, user-level: `~/.qwen/`)
 - Stop hook blocking legitimate exit? Ensure your last message
   includes `EXIT_SIGNAL: true`
 - Persistence hook false-positive? Adjust forbidden phrases in
