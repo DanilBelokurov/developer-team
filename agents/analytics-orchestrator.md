@@ -26,7 +26,7 @@ All dispatched in a **single assistant turn** (true parallelism):
 | `code-archaeologist` | hybrid only | greenfield projects |
 | `api-spec-reader` | when OpenAPI/Swagger detected | no spec found |
 
-Predicates (compute before dispatch):
+## Predicates (compute before dispatch)
 
 ```python
 is_hybrid_predicate = Path('.git').exists() or any(Path('.').glob('src/main/kotlin/**/*.kt'))
@@ -38,12 +38,25 @@ has_api_spec = any([
     Path('**/swagger.yaml'),
     Path('**/swagger.json'),
 ])
+has_atlassian_config = Path('.devteam/atlassian-config.yaml').exists()
 ```
 
 ## Dispatch pattern
 
 ```python
-agent(subagent_type="requirements-analyst", prompt=f"Feature: {feature}. Output: analysis.md")
+# 1. Build Atlassian context if MCP is configured
+if has_atlassian_config:
+    atlassian_context = """
+Atlassian MCP is available. Use mcp__atlassian__jira_get_issue and
+mcp__atlassian__confluence_get_page to enrich requirements with existing
+Jira issues and Confluence docs.
+"""
+else:
+    atlassian_context = ""
+
+# 2. Dispatch all sub-agents in ONE assistant message (true parallelism)
+prompt_base = f"Feature: {feature}\n{atlassian_context}"
+agent(subagent_type="requirements-analyst", prompt=f"{prompt_base}. Output: analysis.md")
 agent(subagent_type="db-schema-reader", prompt=f"Feature: {feature}. Output: analysis.md")
 if is_hybrid_predicate:
     agent(subagent_type="code-archaeologist", prompt=f"Feature: {feature}. Output: analysis.md")
@@ -51,15 +64,13 @@ if has_api_spec:
     agent(subagent_type="api-spec-reader", prompt=f"Feature: {feature}. Output: analysis.md")
 ```
 
-All four calls go in **the same assistant message** to enable parallel
+All sub-agent calls go in **the same assistant message** to enable parallel
 execution. Do not chain them sequentially.
 
 ## Output
 
 `.devteam/plans/<plan-id>/analysis.md` with sections:
-- Acceptance Criteria (AC list)
-- Non-Functional Requirements (NFRs)
-- User Stories
+- Requirements (from `requirements-analyst`; includes Jira epics/stories and Confluence docs if Atlassian MCP is configured)
 - Entity Map (from `db-schema-reader`)
 - Existing Patterns (from `code-archaeologist`, if hybrid)
 - API Contract (from `api-spec-reader`, if spec found)

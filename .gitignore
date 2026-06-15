@@ -406,3 +406,6 @@ docker-compose.*.local.yml
 !scripts/lib/**
 !hooks/lib/
 !hooks/lib/**
+
+# tests
+tests/**

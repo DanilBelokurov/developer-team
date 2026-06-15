@@ -120,7 +120,30 @@ The subshell isolates the failure from the parent context and allows the `ERR` t
 
 ---
 
-## 7. Common ERR trap patterns
+## 7. `source` overwrites caller's variables silently
+
+**Symptom:** A function that sets `SCRIPT_DIR` (or any variable name used by the caller) breaks subsequent code that depends on the caller's value. The error is silent — no error message, just wrong behavior.
+
+**Root cause:** Bash `source` runs in the current shell. Assignments to non-local variables (without `local` keyword) are global. If `state.sh` sets `SCRIPT_DIR="$(dirname ...)"` and the test runner also uses `$SCRIPT_DIR`, the test runner's value is overwritten for all subsequent code in the same shell session.
+
+**Fix:** Save and restore around any `source` that may set global variables:
+
+```bash
+test_state_management() {
+    local _saved_script_dir="$SCRIPT_DIR"
+    source "$PROJECT_ROOT/scripts/state.sh"
+    SCRIPT_DIR="$_saved_script_dir"
+    # ... rest of test
+}
+```
+
+**Pattern to apply:** Whenever sourcing a script that is not under your direct control (like `state.sh`, `events.sh`), save any variables the caller uses that might be reassigned by the sourced script. Common culprits: `SCRIPT_DIR`, `ROOT`, `DEVTEAM_DIR`, `PROJECT_ROOT`.
+
+**Prevention:** Scripts that are meant to be sourced should declare their own variable names with `local` or use namespaced prefixes (e.g., `_DT_ROOT_` instead of `ROOT`).
+
+---
+
+## 8. Common ERR trap patterns
 
 ```bash
 # In common.sh — always returns 0 so set -e doesn't re-trigger

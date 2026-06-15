@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(www.npmjs.com)",
+      "WebFetch(github.com)",
+      "WebFetch(raw.githubusercontent.com)",
+      "WebFetch(registry.modelcontextprotocol.io)"
+    ]
+  },
+  "$version": 4
+}
