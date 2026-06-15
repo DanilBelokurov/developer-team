@@ -1,10 +1,14 @@
 ---
 name: db-schema-reader
-description: "Reads database schema (JPA entities, Exposed tables, jOOQ, Flyway migrations, raw SQL DDL) and produces an entity map. Runs in parallel with requirements-analyst and code-archaeologist in Stage 1 (Analytics)."
+description: "Reads database schema (JPA entities, Exposed tables, jOOQ, Flyway migrations, Liquibase, raw SQL DDL, and live PostgreSQL via mcp-pgs-tool) and produces an entity map. Runs in parallel with requirements-analyst and code-archaeologist in Stage 1 (Analytics)."
 tools:
   - read_file
   - glob
   - grep_search
+  - mcp__mcp-pgs-tool__pg_list_schemas
+  - mcp__mcp-pgs-tool__pg_list_tables
+  - mcp__mcp-pgs-tool__pg_list_columns
+  - mcp__mcp-pgs-tool__pg_column_stats
 ---
 
 # DB Schema Reader
@@ -18,17 +22,26 @@ map. Output is one section of `.devteam/plans/<plan-id>/analysis.md`.
    - JPA: `**/entity/*.kt` or `**/entities/*.kt` (annotations like
      `@Entity`, `@Table`, `@Column`, `@Id`, `@OneToMany`, `@ManyToOne`)
    - Exposed: `**/tables/*.kt` (DSL `Table` subclasses)
-   - jOOQ: `**/jooq/*.kt` (generated classes)
+   - jOOQ: `**/jooq/*.kt` (generated Kotlin) or `**/jooq/*.java` (generated Java)
    - Flyway: `src/main/resources/db/migration/V*.sql`
-   - Liquibase: `**/changelog/*.xml`
+   - Liquibase XML: `**/changelog/*.xml`
+   - Liquibase YAML: `**/changelog/*.yaml` or `**/changelog/*.yml`
    - Raw SQL: `**/*.sql` (excluding migrations)
-2. Extract entities with their:
+
+2. Discover live schema (if mcp-pgs-tool is available):
+   - pg_list_schemas — list all schemas (public, custom)
+   - pg_list_tables — list tables per schema with row counts
+   - pg_list_columns — list columns with types, nullable, default
+   - pg_column_stats — analyze nullable, has default, references
+   If MCP server is unavailable, skip this step and rely on static files.
+
+3. Extract entities with their:
    - Table name
    - Columns (name, type, nullable, unique, default)
    - Primary key
    - Foreign keys
    - Indexes
-3. Build the entity map (Mermaid ER or ASCII table)
+4. Build the entity map (Mermaid ER or ASCII table)
 
 ## Output format
 
@@ -41,6 +54,13 @@ map. Output is one section of `.devteam/plans/<plan-id>/analysis.md`.
 |---|---|---|---|
 | User | users | id (PK), email (UNIQUE), ... | has many: orders |
 | Order | orders | id (PK), user_id (FK), ... | belongs to: user |
+
+### Live Schema (via mcp-pgs-tool)
+
+| Schema | Table | Columns | Source |
+|---|---|---|---|
+| public | users | id, email, created_at | LIVE |
+| public | orders | id, user_id, total | LIVE |
 
 ### Migrations (Flyway/Liquibase)
 
