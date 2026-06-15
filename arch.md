@@ -194,7 +194,8 @@ within each stage.
   "description": "Kotlin + Spring backend 3-stage pipeline (Analytics → Development → Testing) with parallel sub-stages. Integrates skills from yalishevant/kotlin-backend-agent-skills.",
   "mcpServers": {
     "github": {...},
-    "memory": {...}
+    "memory": {...},
+    "semgrep": {...}
   },
   "contextFileName": "QWEN.md",
   "commands": "commands",
@@ -206,7 +207,7 @@ within each stage.
 Fields:
 - `commands` / `skills` / `agents` — directories Qwen Code scans
 - `contextFileName` — file auto-loaded into system prompt
-- `mcpServers` — GitHub and memory MCP servers (optional)
+- `mcpServers` — GitHub, memory, and semgrep MCP servers (optional)
 
 ### 4.2 Slash commands (`commands/devteam/<name>.md`)
 

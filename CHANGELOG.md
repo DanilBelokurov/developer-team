@@ -15,6 +15,8 @@ All notable changes to devteam are documented in this file.
   install timestamp + target path.
 - **`uninstall.sh [project-path]`** with matching target resolution
   and clean removal of project-level state.
+- **Semgrep MCP server** added (9 tools: scan, SCA, AST, custom rules, etc.)
+- **Semgrep quality gate** — security scan on changed files, blocks HIGH/CRITICAL findings
 
 ### Changed
 - **`install.sh`** completely rewritten:
