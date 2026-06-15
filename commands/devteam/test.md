@@ -5,6 +5,15 @@ argument-hint: [--feature "..."] [--plan-id <id>] [--dry-run]
 
 # /devteam:test
 
+**IMMEDIATELY invoke the testing-orchestrator agent.**
+Do NOT implement anything yourself. Do NOT write code directly.
+
+You MUST call the `agent()` tool with `subagent_type="testing-orchestrator"`:
+
+```
+agent(subagent_type="testing-orchestrator", prompt="/devteam:test [--feature \"<feature>\"] [--flags]")
+```
+
 Run only the Testing stage of the Kotlin + Spring backend
 pipeline. Dispatches parallel test engineers and runs the
 `kotlin-quality-gate-enforcer`.

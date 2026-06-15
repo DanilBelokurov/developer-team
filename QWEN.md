@@ -124,6 +124,24 @@ Use `/devteam:build` when the task:
 For trivial single-file changes (1-2 lines), skip the pipeline and
 make the change directly.
 
+## Slash Commands: Always Dispatch via agent()
+
+When you see a slash command (e.g. `/devteam:build`, `/devteam:analyze`),
+the command's markdown file is loaded into context. **Your job is to dispatch
+the work to the appropriate subagent — never to do it yourself.**
+
+**Rule:** If a slash command exists for this workflow, call the `agent()` tool
+immediately. Do not implement the feature directly.
+
+Examples:
+- `/devteam:build` → `agent(subagent_type="pipeline-orchestrator", ...)`
+- `/devteam:analyze` → `agent(subagent_type="analytics-orchestrator", ...)`
+- `/devteam:develop` → `agent(subagent_type="development-orchestrator", ...)`
+- `/devteam:test` → `agent(subagent_type="testing-orchestrator", ...)`
+
+**Why:** Subagents are specialists with precise instructions. Self-implementation
+bypasses the entire pipeline architecture (analytics, parallel agents, quality gates).
+
 ## Quality gates
 
 Every pipeline run goes through:
@@ -193,3 +211,4 @@ quality_gates:
 - Override `model:` field in agent frontmatter (Qwen Code picks)
 - Re-implement orchestration logic — delegate to the stage orchestrators
 - Modify files outside an agent's partition in Stage 2 (orchestrator will revert)
+- **Self-implement when a slash command exists** — always call `agent()` tool first

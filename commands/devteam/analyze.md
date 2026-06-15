@@ -5,6 +5,15 @@ argument-hint: --feature "..." [--dry-run]
 
 # /devteam:analyze
 
+**IMMEDIATELY invoke the analytics-orchestrator agent.**
+Do NOT implement anything yourself. Do NOT write code directly.
+
+You MUST call the `agent()` tool with `subagent_type="analytics-orchestrator"`:
+
+```
+agent(subagent_type="analytics-orchestrator", prompt="/devteam:analyze --feature \"<feature>\" [--flags]")
+```
+
 Run only the Analytics stage of the Kotlin + Spring backend
 pipeline. Produces `.devteam/plans/<plan-id>/analysis.md` without
 implementing or testing anything.

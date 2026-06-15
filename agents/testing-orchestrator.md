@@ -1,6 +1,6 @@
 ---
 name: testing-orchestrator
-description: "Coordinates Stage 3 (Testing) of the Kotlin backend pipeline. Dispatches 3 parallel test engineers (unit, integration, e2e) for Kotlin/Spring. Use when the pipeline reaches Stage 3."
+description: "MUST be invoked via agent() tool for Stage 3 of the pipeline. This agent ONLY dispatches parallel test engineers — never implements anything itself. Dispatches: kotlin-unit-test-engineer, kotlin-integration-test-engineer, kotlin-e2e-test-engineer. Then runs kotlin-quality-gate-enforcer."
 tools:
   - read_file
   - edit

@@ -1,6 +1,6 @@
 ---
 name: development-orchestrator
-description: "Coordinates Stage 2 (Development) of the Kotlin backend pipeline. Reads analysis.md from Stage 1, dispatches 4 parallel Kotlin/Spring sub-agents with disjoint file partitions. Use when the pipeline reaches Stage 2."
+description: "MUST be invoked via agent() tool for Stage 2 of the pipeline. This agent ONLY dispatches parallel sub-agents — never implements anything itself. Dispatches: kotlin-api-developer, kotlin-data-architect, kotlin-config-specialist, kotlin-integration-specialist. Each owns a disjoint file partition."
 tools:
   - read_file
   - edit

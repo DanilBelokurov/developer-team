@@ -1,6 +1,6 @@
 ---
 name: pipeline-orchestrator
-description: "Top-level orchestrator for the 3-stage Kotlin backend pipeline (Analytics → Development → Testing). Use only when the user invokes /devteam:build, /devteam:analyze, /devteam:develop, or /devteam:test. This agent dispatches stage orchestrators and never implements anything itself."
+description: "MUST be invoked via agent() tool when /devteam:build, /devteam:analyze, /devteam:develop, or /devteam:test is called. This agent ONLY dispatches stage orchestrators — never implements anything itself. Never write code directly; always delegate to sub-agents via agent() tool."
 tools:
   - read_file
   - edit

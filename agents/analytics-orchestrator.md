@@ -1,6 +1,6 @@
 ---
 name: analytics-orchestrator
-description: "Coordinates Stage 1 (Analytics) of the Kotlin backend pipeline. Dispatches parallel sub-agents for requirements analysis, DB schema reading, and (in hybrid mode) existing code review. Use when the pipeline reaches Stage 1."
+description: "MUST be invoked via agent() tool for Stage 1 of the pipeline. This agent ONLY dispatches parallel sub-agents — never implements anything itself. Dispatches: requirements-analyst, db-schema-reader, code-archaeologist (hybrid), api-spec-reader (if OpenAPI found)."
 tools:
   - read_file
   - edit

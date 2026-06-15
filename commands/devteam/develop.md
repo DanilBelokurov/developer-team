@@ -5,6 +5,15 @@ argument-hint: --feature "..." [--plan-id <id>] [--dry-run] [--pipeline.retry.pe
 
 # /devteam:develop
 
+**IMMEDIATELY invoke the development-orchestrator agent.**
+Do NOT implement anything yourself. Do NOT write code directly.
+
+You MUST call the `agent()` tool with `subagent_type="development-orchestrator"`:
+
+```
+agent(subagent_type="development-orchestrator", prompt="/devteam:develop --feature \"<feature>\" [--flags]")
+```
+
 Run only the Development stage of the Kotlin + Spring backend
 pipeline. Reads existing `analysis.md` and dispatches parallel
 implementation agents.

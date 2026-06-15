@@ -5,6 +5,18 @@ argument-hint: --feature "..." [--skip-stage analytics|development|testing] [--s
 
 # /devteam:build
 
+**IMMEDIATELY invoke the pipeline-orchestrator agent.**
+Do NOT implement anything yourself. Do NOT write code directly.
+
+You MUST call the `agent()` tool with `subagent_type="pipeline-orchestrator"`:
+
+```
+agent(subagent_type="pipeline-orchestrator", prompt="/devteam:build --feature \"<feature>\" [--flags]")
+```
+
+The pipeline-orchestrator agent handles all logic: dispatching stages,
+managing state, and coordinating parallel sub-agents.
+
 Full Kotlin + Spring backend development pipeline. Runs three
 sequential stages with parallel sub-agents within each.
 
