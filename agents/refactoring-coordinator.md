@@ -6,7 +6,7 @@ tools:
   - edit
   - write_file
   - glob
-  - grep_search
+  - cocoindex_search
   - bash
   - agent
 ---

@@ -4,7 +4,7 @@ description: "Reads OpenAPI/Swagger spec if present and produces an API contract
 tools:
   - read_file
   - glob
-  - grep_search
+  - cocoindex_search
 ---
 
 # API Spec Reader

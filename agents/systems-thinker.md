@@ -4,7 +4,7 @@ description: Bug Council member - Dependencies, architectural issues, integratio
 tools:
   - read_file
   - glob
-  - grep_search
+  - cocoindex_search
   - bash
 ---
 # Systems Thinker Agent

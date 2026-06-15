@@ -20,6 +20,11 @@
       "type": "stdio",
       "command": "semgrep",
       "args": ["mcp"]
+    },
+    "cocoindex": {
+      "type": "stdio",
+      "command": "ccc",
+      "args": ["mcp"]
     }
   },
   "contextFileName": "QWEN.md",

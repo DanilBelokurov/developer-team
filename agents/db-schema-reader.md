@@ -4,7 +4,7 @@ description: "Reads database schema (JPA entities, Exposed tables, jOOQ, Flyway 
 tools:
   - read_file
   - glob
-  - grep_search
+  - cocoindex_search
   - mcp__mcp-pgs-tool__pg_list_schemas
   - mcp__mcp-pgs-tool__pg_list_tables
   - mcp__mcp-pgs-tool__pg_list_columns

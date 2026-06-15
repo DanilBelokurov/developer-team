@@ -44,6 +44,7 @@ was launched.
 
 | Event | Used by | Purpose |
 |---|---|---|
+| `PreToolUse` (cocoindex_search) | `cocoindex-hook.sh` | Auto-refresh cocoindex index |
 | `PreToolUse` (Edit\|Write, Bash) | `pre-tool-use-hook.sh` | Scope check, dangerous-command block |
 | `PostToolUse` (Edit\|Write, Bash) | `post-tool-use-hook.sh` | Track changes, detect gates |
 | `Stop` (`*`) | `stop-hook.sh` | Block exit w/o `EXIT_SIGNAL: true` |
@@ -78,6 +79,7 @@ Qwen Code passes hook input as JSON via stdin. The shim at
 | `persistence-hook.sh` | Detects abandonment language on `idle_prompt`, re-engages |
 | `scope-check.sh` | Helper for `pre-tool-use-hook.sh` (validates file paths against task scope) |
 | `run-hook.sh` | Shim: maps Qwen Code stdin JSON → legacy env vars |
+| `cocoindex-hook.sh` | Auto-refreshes cocoindex index if stale (>24h) before cocoindex_search tool calls |
 
 ## Configuration
 

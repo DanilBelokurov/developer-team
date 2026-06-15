@@ -2,6 +2,16 @@
   "hooks": {
     "PreToolUse": [
       {
+        "matcher": "cocoindex_search",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "__HOOK_BASE__/run-hook.sh cocoindex-hook",
+            "description": "Auto-refresh cocoindex if stale (>24h)"
+          }
+        ]
+      },
+      {
         "matcher": "Edit|Write",
         "hooks": [
           {

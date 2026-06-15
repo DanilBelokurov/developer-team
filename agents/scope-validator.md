@@ -4,7 +4,7 @@ description: Enforces 6-layer scope compliance with VETO power
 tools:
   - read_file
   - glob
-  - grep_search
+  - cocoindex_search
   - bash
 ---
 # Scope Validator Agent

@@ -4,7 +4,7 @@ description: Bug Council member - Error analysis, hypothesis generation, causal 
 tools:
   - read_file
   - glob
-  - grep_search
+  - cocoindex_search
   - bash
 ---
 # Root Cause Analyst Agent

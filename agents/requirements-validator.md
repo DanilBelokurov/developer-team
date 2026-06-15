@@ -4,7 +4,7 @@ description: Quality gate with strict acceptance criteria validation
 tools:
   - read_file
   - glob
-  - grep_search
+  - cocoindex_search
   - bash
 ---
 # Requirements Validator Agent
