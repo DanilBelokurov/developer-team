@@ -4,7 +4,7 @@ description: Bug Council member - Similar bugs, anti-pattern identification, cod
 tools:
   - read_file
   - glob
-  - cocoindex_search
+  - graphfocus_find_symbol
   - bash
 ---
 # Pattern Matcher Agent

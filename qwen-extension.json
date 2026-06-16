@@ -21,9 +21,9 @@
       "command": "semgrep",
       "args": ["mcp"]
     },
-    "cocoindex": {
+    "graphfocus": {
       "type": "stdio",
-      "command": "ccc",
+      "command": "graphfocus",
       "args": ["mcp"]
     }
   },

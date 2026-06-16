@@ -17,8 +17,8 @@ All notable changes to devteam are documented in this file.
   and clean removal of project-level state.
 - **Semgrep MCP server** added (9 tools: scan, SCA, AST, custom rules, etc.)
 - **Semgrep quality gate** — security scan on changed files, blocks HIGH/CRITICAL findings
-- **CocoIndex MCP server** added — semantic code search (AST-based) replacing grep_search in all agents
-- **CocoIndex auto-index hook** — automatic reindexing when index is stale (>24h)
+- **GraphFocus MCP server** added — knowledge graph code analysis (AST-based) replacing grep_search in all agents
+- **GraphFocus auto-index hook** — automatic reindexing when index is stale (>24h)
 
 ### Changed
 - **`install.sh`** completely rewritten:

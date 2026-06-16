@@ -4,7 +4,7 @@ description: "Runs Kotlin + Spring quality gates: ktlint, detekt, Kover coverage
 tools:
   - read_file
   - glob
-  - cocoindex_search
+  - graphfocus_find_symbol
   - bash
 ---
 

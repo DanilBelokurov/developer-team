@@ -4,7 +4,7 @@ description: Bug Council member - Git history, regression detection, blame analy
 tools:
   - read_file
   - glob
-  - cocoindex_search
+  - graphfocus_find_symbol
   - bash
 ---
 # Code Archaeologist Agent

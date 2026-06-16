@@ -4,7 +4,7 @@ description: Activates and coordinates 5-member bug diagnosis team for complex i
 tools:
   - read_file
   - glob
-  - cocoindex_search
+  - graphfocus_find_symbol
   - bash
   - agent
 ---

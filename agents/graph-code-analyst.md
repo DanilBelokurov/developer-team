@@ -4,7 +4,7 @@ description: "Analyzes codebase structure and patterns using a Graphify knowledg
 tools:
   - read_file
   - glob
-  - cocoindex_search
+  - graphfocus_find_symbol
   - mcp__graphify__query_graph
   - mcp__graphify__get_neighbors
   - mcp__graphify__shortest_path

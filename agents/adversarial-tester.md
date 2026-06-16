@@ -4,7 +4,7 @@ description: Bug Council member - Edge cases, security vulnerabilities, attack v
 tools:
   - read_file
   - glob
-  - cocoindex_search
+  - graphfocus_find_symbol
   - bash
 ---
 # Adversarial Tester Agent

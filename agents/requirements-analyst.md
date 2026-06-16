@@ -4,7 +4,7 @@ description: "Parses user feature description into structured acceptance criteri
 tools:
   - read_file
   - glob
-  - cocoindex_search
+  - graphfocus_find_symbol
   - mcp__atlassian__jira_get_issue
   - mcp__atlassian__confluence_get_page
 ---

@@ -6,7 +6,7 @@ tools:
   - edit
   - write_file
   - glob
-  - cocoindex_search
+  - graphfocus_find_symbol
   - agent
 ---
 

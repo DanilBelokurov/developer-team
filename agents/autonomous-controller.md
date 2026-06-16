@@ -4,7 +4,7 @@ description: Controls autonomous execution mode with stop hooks and persistence
 tools:
   - read_file
   - glob
-  - cocoindex_search
+  - graphfocus_find_symbol
   - bash
   - agent
 ---

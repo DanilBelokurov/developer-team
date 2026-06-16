@@ -2,12 +2,12 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "cocoindex_search",
+        "matcher": "find_symbol|get_neighbors|find_callers|find_path|find_semantic|get_context_pack|hot_paths|cross_language_links",
         "hooks": [
           {
             "type": "command",
-            "command": "__HOOK_BASE__/run-hook.sh cocoindex-hook",
-            "description": "Auto-refresh cocoindex if stale (>24h)"
+            "command": "__HOOK_BASE__/run-hook.sh graphfocus-hook",
+            "description": "Auto-update graphfocus index if needed"
           }
         ]
       },
