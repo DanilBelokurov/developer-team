@@ -2,6 +2,15 @@
 
 All notable changes to devteam are documented in this file.
 
+## [6.4.1] — 2026-06-16 — Plan-isolated KV state
+
+### Changed
+- **KV state now supports plan isolation**. Pipeline state (stage.*, hitl_*, retry_*) is stored in `kv/<plan-id>/<key>` instead of flat `kv/<key>`. This enables parallel pipeline runs without race conditions.
+- **`state.sh`** updated: `set_kv_state()`, `get_kv_state()`, `delete_kv_state()` now accept optional `plan_id` parameter
+- **Plan ID format updated**: `plan-<feature-slug>-<date>-<short-id>` (e.g., `plan-add-oauth-login-20260616-a3f9`)
+- **State structure**: KV directories now mirror `.devteam/plans/` directories
+- All orchestrators updated to use plan-isolated KV keys
+
 ## [6.4.0] — 2026-06-16 — Hooks/scripts in .devteam/
 
 ### Changed

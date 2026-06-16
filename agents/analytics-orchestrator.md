@@ -95,10 +95,10 @@ execution. Do not chain them sequentially.
 ## State
 
 ```bash
-set_kv_state "stage.analytics.status" "in_progress"
+set_kv_state "stage.analytics.status" "in_progress" "$PLAN_ID"
 # ... agents run ...
-set_kv_state "stage.analytics.status" "completed"
-set_kv_state "stage.analytics.output" ".devteam/plans/<plan-id>/analysis.md"
+set_kv_state "stage.analytics.status" "completed" "$PLAN_ID"
+set_kv_state "stage.analytics.output" ".devteam/plans/$PLAN_ID/analysis.md" "$PLAN_ID"
 ```
 
 ## Exit

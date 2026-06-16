@@ -66,11 +66,14 @@ Valid values: `analytics`, `development`, `testing`.
 
 ```bash
 source "$QWEN_PROJECT_DIR/scripts/state.sh"
-PLAN_ID="plan-$(date +%Y%m%d-%H%M%S)-$(uuidgen | cut -c1-8)"
+
+# Generate slug from feature name: "Add OAuth login" -> "add-oauth-login"
+SLUG=$(echo "$FEATURE" | sed 's/[^a-zA-Z0-9 ]//g' | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | cut -c1-30)
+PLAN_ID="plan-${SLUG}-$(date +%Y%m%d)-$(uuidgen | cut -c1-8)"
 mkdir -p ".devteam/plans/$PLAN_ID"
-set_kv_state "pipeline.active" "true"
-set_kv_state "pipeline.feature" "$FEATURE"
-set_kv_state "pipeline.plan_id" "$PLAN_ID"
+set_kv_state "pipeline.active" "true" "$PLAN_ID"
+set_kv_state "pipeline.feature" "$FEATURE" "$PLAN_ID"
+set_kv_state "pipeline.plan_id" "$PLAN_ID" "$PLAN_ID"
 ```
 
 ### 1. Compute predicates (BEFORE dry-run output)

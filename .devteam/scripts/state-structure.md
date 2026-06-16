@@ -22,20 +22,31 @@ Atomic writes via mkdir-based locking (POSIX-portable).
 
 ```
 .devteam/
-└── state/
-    ├── current-session.md              # pointer to active session ("session/<id>")
-    ├── sessions/
-    │   └── session-YYYYMMDD-HHMMSS-<rand>.md
-    ├── kv/
-    │   └── <key>                       # one file per KV key (e.g. stage.analytics.status)
-    ├── events/
-    │   └── YYYY-MM-DD-events.md        # append-only daily log
-    ├── agent-runs/
-    │   └── run-YYYYMMDD-HHMMSS-<rand>.md
-    ├── tasks/
-    │   └── TASK-NNN.md
-    ├── circuit-breaker.md              # circuit breaker state (YAML frontmatter)
-    └── gates.md                        # quality gate log (append-only)
+├── state/                              # session state, KV, events, tasks
+│   ├── current-session.md              # pointer to active session ("session/<id>")
+│   ├── sessions/
+│   │   └── session-YYYYMMDD-HHMMSS-<rand>.md
+│   ├── kv/
+│   │   ├── global/                     # global settings (pipeline-agnostic)
+│   │   └── <plan-id>/                 # plan-isolated KV (one dir per pipeline run)
+│   │       ├── active                  # "true"/"false"
+│   │       ├── session                 # session-id
+│   │       ├── feature                 # feature description
+│   │       ├── stage.analytics.status   # "pending", "in_progress", "completed", etc.
+│   │       ├── stage.development.status
+│   │       └── ...                     # other stage KV keys
+│   ├── events/
+│   │   └── YYYY-MM-DD-events.md        # append-only daily log
+│   ├── agent-runs/
+│   │   └── run-YYYYMMDD-HHMMSS-<rand>.md
+│   ├── tasks/
+│   │   └── TASK-NNN.md
+│   ├── circuit-breaker.md              # circuit breaker state (YAML frontmatter)
+│   └── gates.md                        # quality gate log (append-only)
+└── plans/                              # analytics, plans, and run artifacts
+    └── <plan-id>/                      # one directory per pipeline run
+        ├── analysis.md                 # Stage 1 output (requirements, entity map, etc.)
+        └── stage2.merge.md            # Stage 2 merged output (if applicable)
 ```
 
 ---
@@ -121,17 +132,37 @@ bug_council_reason: ~
 
 ---
 
-### `kv/<key>`
+### `kv/<key>` and `kv/<plan-id>/<key>`
 
-Plain text, one value per file. Examples:
+Plain text, one value per file. KV state supports **plan isolation** for
+parallel pipeline runs.
 
+**Without plan_id** (global, backward-compatible):
 ```bash
-$ cat .devteam/state/kv/stage.analytics.status
+$ cat .devteam/state/kv/global.some_setting
+value
+```
+
+**With plan_id** (plan-isolated):
+```bash
+$ cat .devteam/state/kv/plan-add-oauth-login-20260616-a3f9/stage.analytics.status
 completed
-$ cat .devteam/state/kv/stage.development.hitl_action
+$ cat .devteam/state/kv/plan-add-oauth-login-20260616-a3f9/stage.development.hitl_action
 approve
-$ cat .devteam/state/kv/pipeline.retry_counts
+$ cat .devteam/state/kv/plan-add-oauth-login-20260616-a3f9/pipeline.retry_counts
 {"kotlin-data-architect": 2}
+```
+
+**API**:
+```bash
+# Set with plan isolation
+set_kv_state "stage.analytics.status" "completed" "$PLAN_ID"
+
+# Get with plan isolation
+get_kv_state "stage.analytics.status" "" "$PLAN_ID"
+
+# Set without plan (global)
+set_kv_state "global.some_key" "value"
 ```
 
 **Key naming convention**: `<scope>.<key>` (dot-separated). Examples:
@@ -145,6 +176,10 @@ booleans, use `true` / `false`. For "null", use `~`.
 
 **Atomic writes**: `set_kv_state()` uses mkdir-based locking. Lock
 directory is at `<key>.lock` (sibling to the key file).
+
+**Plan isolation**: Each parallel pipeline run gets its own KV directory
+under `kv/<plan-id>/`. This prevents race conditions when multiple
+pipelines run concurrently.
 
 ---
 
@@ -225,7 +260,7 @@ YAML frontmatter + body. One file per task.
 ---
 task_id: TASK-001
 session_id: session-20260614-161835-3f145341
-plan_id: plan-20260614-161835-3f145341
+plan_id: plan-add-oauth-login-20260616-a3f9
 sprint_id: SPRINT-001
 parent_task_id: ~
 ---
@@ -300,6 +335,49 @@ Append-only log (one file, all gates).
 - errors:
   - src/main/kotlin/.../oauth.py:42:1
 ```
+
+---
+
+## Plans directory (`plans/`)
+
+Pipeline run artifacts (analytics, plans, development output).
+
+### Directory structure
+
+```
+plans/<plan-id>/
+├── analysis.md       # Stage 1 output
+└── stage2.merge.md  # Stage 2 merged output (if applicable)
+```
+
+### `plans/<plan-id>/analysis.md`
+
+Stage 1 (Analytics) output. Created by parallel agents:
+- `requirements-analyst` — functional requirements, acceptance criteria
+- `db-schema-reader` — entity map, relationships
+- `code-archaeologist` — existing code context (if hybrid mode)
+- `api-spec-reader` — API contracts (if OpenAPI/Swagger found)
+
+```markdown
+# Analysis: Add OAuth login
+
+## Requirements
+- ...
+
+## Entity Map
+- ...
+
+## Architecture
+- ...
+
+## Risks
+- ...
+```
+
+### `plans/<plan-id>/stage2.merge.md`
+
+Stage 2 (Development) merged output. Created by `development-orchestrator`
+after parallel agents complete their work.
 
 ---
 
@@ -499,9 +577,9 @@ All public functions in `state.sh` (35 total, full backward compat):
 - `get_session_json [id]` — renders frontmatter as JSON (compat)
 
 ### KV state
-- `set_kv_state <key> <value>` — atomic write with lock
-- `get_kv_state <key> [default]` — read
-- `delete_kv_state <key>` — remove
+- `set_kv_state <key> <value> [plan_id]` — atomic write with lock; if plan_id provided, stores in `kv/<plan_id>/<key>`
+- `get_kv_state <key> [default] [plan_id]` — read; if plan_id provided, reads from `kv/<plan_id>/<key>`
+- `delete_kv_state <key> [plan_id]` — remove; if plan_id provided, removes from `kv/<plan_id>/<key>`
 
 ### State setters/getters (session frontmatter)
 - `set_state <field> <value>` — update frontmatter atomically

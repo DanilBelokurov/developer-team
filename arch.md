@@ -356,8 +356,11 @@ See Section 5 (Pipeline) for the flow diagram with the HITL gate.
 
 - **Sessions** — `.devteam/state/sessions/<id>.md` (YAML frontmatter
   + Markdown body). One file per session.
-- **session_state KV** — `.devteam/state/kv/<key>` (one file per key).
-  Values are plain text or JSON. Atomic writes via mkdir-lock.
+- **KV state (plan-isolated)** — `.devteam/state/kv/<plan-id>/<key>` (one
+  file per key, per pipeline run). Enables parallel pipelines without
+  race conditions.
+- **KV state (global)** — `.devteam/state/kv/global/<key>` (pipeline-agnostic
+  settings).
 - **Events** — `.devteam/state/events/<date>-events.md` (append-only,
   one file per day, never edited).
 - **Agent runs** — `.devteam/state/agent-runs/<run-id>.md` (per-invocation).
@@ -369,13 +372,17 @@ See Section 5 (Pipeline) for the flow diagram with the HITL gate.
 documentation. No schema migration needed; new state files are
 created by `scripts/state-init.sh`.
 
-Stage tracking (including HITL state added in v6.1) uses the existing
-`session_state` KV pattern (now stored as flat files in
-`.devteam/state/kv/`).
+Stage tracking uses the plan-isolated KV pattern:
+- Without PLAN_ID → global key (backward-compatible)
+- With PLAN_ID → stored in `kv/<plan-id>/<key>`
 
 **Concurrency**: mkdir-based locking (POSIX-portable, no `flock`
 dependency). Each `set_kv_state()` / `atomic_write()` creates a sidecar
 `<file>.lock` directory; mkdir returns EEXIST if already locked.
+
+**Parallel pipelines**: Each pipeline run gets its own KV directory
+under `kv/<plan-id>/`, preventing race conditions between concurrent
+pipeline executions.
 
 ### 4.7 Hook installer (`install.sh`)
 

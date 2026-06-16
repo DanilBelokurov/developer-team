@@ -519,7 +519,7 @@ DevTeam сохраняет всё состояние в `.devteam/state/` (Markd
 ### `.devteam/plans/<plan-id>/`
 
 ```
-.devteam/plans/plan-20260614-143022-a3f9/
+.devteam/plans/plan-add-oauth-login-20260616-a3f9/
 ├── analysis.md           # Выход Этапа 1
 ├── stage2.merge.md       # Этап 2: проверка пересечений
 └── checkpoints/          # auto-saved

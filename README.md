@@ -257,7 +257,7 @@ Kotlin-исходники. **Детекция OpenAPI** = glob для
 ```bash
 /devteam:develop
 /devteam:develop --feature "Добавить OAuth login"   # использует последний plan
-/devteam:develop --plan-id plan-20260614-143022-a3f9
+/devteam:develop --plan-id plan-add-oauth-login-20260616-a3f9
 ```
 
 ### `/devteam:test` — только Этап 3
@@ -591,7 +591,8 @@ state/
 ### Что хранится
 
 - **Sessions** — `.devteam/state/sessions/<id>.md` с YAML frontmatter
-- **session_state KV** — `.devteam/state/kv/<key>` (stage.*, hitl_*, retry_*, etc.)
+- **KV state (plan-isolated)** — `.devteam/state/kv/<plan-id>/<key>` (stage.*, hitl_*, retry_*, etc.)
+- **KV state (global)** — `.devteam/state/kv/global/<key>` (pipeline-agnostic settings)
 - **events** — `.devteam/state/events/<date>-events.md` (лог гейтов, вызовов, HITL actions)
 - **agent runs** — `.devteam/state/agent-runs/<run-id>.md` (per-invocation)
 - **tasks** — `.devteam/state/tasks/<TASK-ID>.md`
@@ -602,7 +603,7 @@ state/
 ```bash
 # Снапшот текущего state
 head -30 .devteam/state/sessions/$(cat .devteam/state/current-session.md | cut -d/ -f2)
-cat .devteam/state/kv/stage.analytics.status
+cat .devteam/state/kv/<plan-id>/stage.analytics.status
 
 # События за сегодня
 cat $(ls -t .devteam/state/events/*.md | head -1)
@@ -621,7 +622,7 @@ cat $(ls -t .devteam/state/events/*.md | head -1)
 Для каждого запуска пайплайна создаётся директория:
 
 ```
-.devteam/plans/plan-20260614-143022-a3f9/
+.devteam/plans/plan-add-oauth-login-20260616-a3f9/
 ├── analysis.md           # Выход Этапа 1
 ├── stage2.merge.md       # Этап 2: проверка пересечений + верификация сборки
 └── checkpoints/          # checkpoint-файлы (автосохранение)

@@ -341,29 +341,53 @@ EOF
 # ============================================================================
 
 # Set a key-value pair
-# Args: key, value, [session_id]
+# Args: key, value, [plan_id]
+# If plan_id is provided, stores in KV_DIR/<plan_id>/<key> for isolation
 set_kv_state() {
     local key="$1"
     local value="$2"
+    local plan_id="${3:-}"
     [[ -z "$key" ]] && { log_error "Key cannot be empty"; return 1; }
     ensure_state_dir
-    atomic_write "${KV_DIR}/${key}" "$value"
+
+    if [[ -n "$plan_id" ]]; then
+        # Plan-isolated storage: KV_DIR/<plan_id>/<key>
+        mkdir -p "${KV_DIR}/${plan_id}"
+        atomic_write "${KV_DIR}/${plan_id}/${key}" "$value"
+    else
+        # Global storage: KV_DIR/<key>
+        atomic_write "${KV_DIR}/${key}" "$value"
+    fi
 }
 
 # Get a key-value pair
-# Args: key, [default]
+# Args: key, [default], [plan_id]
+# If plan_id is provided, reads from KV_DIR/<plan_id>/<key>
 get_kv_state() {
     local key="$1"
     local default="${2:-}"
+    local plan_id="${3:-}"
     local val
-    val=$(cat "${KV_DIR}/${key}" 2>/dev/null)
+
+    if [[ -n "$plan_id" ]]; then
+        val=$(cat "${KV_DIR}/${plan_id}/${key}" 2>/dev/null)
+    else
+        val=$(cat "${KV_DIR}/${key}" 2>/dev/null)
+    fi
     [[ -n "$val" ]] && echo "$val" || echo "$default"
 }
 
 # Delete a key-value pair
+# Args: key, [plan_id]
 delete_kv_state() {
     local key="$1"
-    rm -f "${KV_DIR}/${key}" 2>/dev/null
+    local plan_id="${2:-}"
+
+    if [[ -n "$plan_id" ]]; then
+        rm -f "${KV_DIR}/${plan_id}/${key}" 2>/dev/null
+    else
+        rm -f "${KV_DIR}/${key}" 2>/dev/null
+    fi
 }
 
 # ============================================================================

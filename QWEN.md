@@ -158,10 +158,11 @@ with a structured failure report.
 
 - Pipeline state: `.devteam/state/` (Markdown files, gitignored)
 - Sessions: `.devteam/state/sessions/<id>.md` (YAML frontmatter)
-- KV state: `.devteam/state/kv/<key>` (one file per key)
+- KV state (plan-isolated): `.devteam/state/kv/<plan-id>/<key>` (one file per key, per pipeline run)
+- KV state (global): `.devteam/state/kv/global/<key>` (pipeline-agnostic)
 - Events: `.devteam/state/events/<date>-events.md` (append-only)
 - Plans: `.devteam/plans/<plan-id>/` (unchanged)
-- Stage tracking: `session_state` KV (stored as flat files)
+- Stage tracking: plan-isolated KV (`set_kv_state <key> <value> $PLAN_ID`)
 - Hooks: `~/.qwen/settings.json` (managed by `install.sh`, shell + jq)
 
 v6.1 used SQLite; v6.2 replaced with file-based state for zero

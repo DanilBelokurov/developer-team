@@ -29,7 +29,7 @@ run. The orchestrator finds `analysis.md` in
 ```bash
 /devteam:develop
 /devteam:develop --feature "Add OAuth login"   # auto-selects most recent plan
-/devteam:develop --plan-id plan-20260613-143022-a3f9
+/devteam:develop --plan-id plan-add-oauth-login-20260616-a3f9
 /devteam:develop --dry-run
 ```
 

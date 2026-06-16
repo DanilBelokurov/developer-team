@@ -69,10 +69,10 @@ agent(subagent_type="kotlin-integration-specialist",
 ## State
 
 ```bash
-set_kv_state "stage.development.status" "in_progress"
-set_kv_state "stage.development.retry_counts" '{}'
+set_kv_state "stage.development.status" "in_progress" "$PLAN_ID"
+set_kv_state "stage.development.retry_counts" '{}' "$PLAN_ID"
 # ... agents run (with per-agent retry) ...
-set_kv_state "stage.development.status" "completed"
+set_kv_state "stage.development.status" "completed" "$PLAN_ID"
 ```
 
 ## Output

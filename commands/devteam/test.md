@@ -28,7 +28,7 @@ The orchestrator runs tests against the current working directory.
 ```bash
 /devteam:test
 /devteam:test --feature "Add OAuth login"
-/devteam:test --plan-id plan-20260613-143022-a3f9
+/devteam:test --plan-id plan-add-oauth-login-20260616-a3f9
 /devteam:test --dry-run
 ```
 

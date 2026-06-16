@@ -49,14 +49,14 @@ Each stage has its own orchestrator agent:
 
 ## Pipeline state
 
-Track via `scripts/state.sh` using `session_state` KV:
+Track via `scripts/state.sh` using `session_state` KV (plan-isolated):
 
 ```bash
-set_kv_state "stage.analytics.status" "pending|in_progress|completed|failed|awaiting_approval"
-set_kv_state "stage.development.status" "..."
-set_kv_state "stage.testing.status" "..."
-set_kv_state "pipeline.active" "true|false"
-set_kv_state "pipeline.retry_counts" '{"<agent>": N, ...}'
+set_kv_state "stage.analytics.status" "pending|in_progress|completed|failed|awaiting_approval" "$PLAN_ID"
+set_kv_state "stage.development.status" "..." "$PLAN_ID"
+set_kv_state "stage.testing.status" "..." "$PLAN_ID"
+set_kv_state "pipeline.active" "true|false" "$PLAN_ID"
+set_kv_state "pipeline.retry_counts" '{"<agent>": N, ...}' "$PLAN_ID"
 ```
 
 ## Dispatch pattern
@@ -78,26 +78,26 @@ explicitly skipped or analysis is empty.
 When HITL is paused, set:
 
 ```bash
-set_kv_state "stage.development.status" "awaiting_approval"
-set_kv_state "stage.development.hitl_paused_at" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-set_kv_state "stage.development.analysis_path" ".devteam/plans/<plan-id>/analysis.md"
+set_kv_state "stage.development.status" "awaiting_approval" "$PLAN_ID"
+set_kv_state "stage.development.hitl_paused_at" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$PLAN_ID"
+set_kv_state "stage.development.analysis_path" ".devteam/plans/$PLAN_ID/analysis.md" "$PLAN_ID"
 ```
 
 When user acts:
 
 ```bash
 # Approve or Edit → continue to Stage 2
-set_kv_state "stage.development.status" "pending"
-set_kv_state "stage.development.hitl_action" "approve|edit"
-set_kv_state "stage.development.hitl_resolved_at" "..."
+set_kv_state "stage.development.status" "pending" "$PLAN_ID"
+set_kv_state "stage.development.hitl_action" "approve|edit" "$PLAN_ID"
+set_kv_state "stage.development.hitl_resolved_at" "..." "$PLAN_ID"
 
 # Request changes → re-run Stage 1
-set_kv_state "stage.analytics.status" "pending"
-set_kv_state "stage.development.hitl_action" "request_changes"
+set_kv_state "stage.analytics.status" "pending" "$PLAN_ID"
+set_kv_state "stage.development.hitl_action" "request_changes" "$PLAN_ID"
 
 # Abort → halt pipeline
-set_kv_state "pipeline.active" "false"
-set_kv_state "stage.development.hitl_action" "abort"
+set_kv_state "pipeline.active" "false" "$PLAN_ID"
+set_kv_state "stage.development.hitl_action" "abort" "$PLAN_ID"
 emit: "PIPELINE ABORTED at HITL gate after Stage 1"
 # Note: do NOT emit EXIT_SIGNAL: true
 ```
@@ -107,13 +107,13 @@ emit: "PIPELINE ABORTED at HITL gate after Stage 1"
 After Stage 1 completes and before Stage 2 dispatch:
 
 ```python
-if get_kv_state("stage.analytics.status") == "completed" and \
-   get_kv_state("stage.development.status") != "skipped" and \
+if get_kv_state("stage.analytics.status", "", PLAN_ID) == "completed" and \
+   get_kv_state("stage.development.status", "", PLAN_ID) != "skipped" and \
    not is_skipped("development"):
 
     # Pause for HITL
-    set_kv_state("stage.development.status", "awaiting_approval")
-    set_kv_state("stage.development.analysis_path", analysis_md_path)
+    set_kv_state("stage.development.status", "awaiting_approval", PLAN_ID)
+    set_kv_state("stage.development.analysis_path", analysis_md_path, PLAN_ID)
 
     action = ask_user_question(
         "Stage 1 (Analytics) complete. Review the analysis before Stage 2?",
@@ -139,18 +139,18 @@ if get_kv_state("stage.analytics.status") == "completed" and \
 
     # Handle each action
     if action == "Approve and continue to Stage 2":
-        set_kv_state("stage.development.status", "pending")
-        set_kv_state("stage.development.hitl_action", "approve")
+        set_kv_state("stage.development.status", "pending", PLAN_ID)
+        set_kv_state("stage.development.hitl_action", "approve", PLAN_ID)
     elif action == "Request changes (re-run Stage 1)":
-        set_kv_state("stage.analytics.status", "pending")  # re-run
-        set_kv_state("stage.development.hitl_action", "request_changes")
+        set_kv_state("stage.analytics.status", "pending", PLAN_ID)  # re-run
+        set_kv_state("stage.development.hitl_action", "request_changes", PLAN_ID)
         # Loop back to Stage 1 (orchestrator's main loop handles this)
     elif action == "Edit analysis.md manually, then continue":
-        set_kv_state("stage.development.status", "pending")
-        set_kv_state("stage.development.hitl_action", "edit")
+        set_kv_state("stage.development.status", "pending", PLAN_ID)
+        set_kv_state("stage.development.hitl_action", "edit", PLAN_ID)
     elif action == "Abort pipeline":
-        set_kv_state("pipeline.active", "false")
-        set_kv_state("stage.development.hitl_action", "abort")
+        set_kv_state("pipeline.active", "false", PLAN_ID)
+        set_kv_state("stage.development.hitl_action", "abort", PLAN_ID)
         emit("PIPELINE ABORTED at HITL gate after Stage 1")
         return  # do NOT proceed to Stage 2, do NOT emit EXIT_SIGNAL
 ```
@@ -169,11 +169,11 @@ If the pipeline is restarted while `stage.development.status ==
 
 ```python
 # On pipeline start, detect paused state
-paused_action = get_kv_state("stage.development.hitl_action")
+paused_action = get_kv_state("stage.development.hitl_action", "", PLAN_ID)
 if paused_action == "approve" or paused_action == "edit":
-    set_kv_state("stage.development.status", "pending")
+    set_kv_state("stage.development.status", "pending", PLAN_ID)
 elif paused_action == "request_changes":
-    set_kv_state("stage.analytics.status", "pending")
+    set_kv_state("stage.analytics.status", "pending", PLAN_ID)
 # "abort" → don't restart; manual intervention required
 ```
 
