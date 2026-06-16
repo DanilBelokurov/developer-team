@@ -31,10 +31,10 @@ devteam/
 ├── commands/devteam/        # Slash commands (16)
 ├── skills/                  # Skill files (12)
 ├── agents/                  # Subagent definitions (18)
-├── .devteam/
-│   ├── hooks/               # Hook scripts (9 .sh + run-hook.sh shim)
-│   ├── scripts/             # State, events, DB, schema
-│   └── *.yaml               # Config files
+├── hooks/                   # Hook scripts (9 .sh + run-hook.sh shim)
+├── scripts/                 # State, events, DB, schema
+├── config/                  # Pipeline config files (*.yaml, *.md)
+└── .devteam/                # Runtime state (gitignored)
 ├── tests/                   # Test suite
 ├── examples/                # Usage examples
 ├── docs/                    # User and developer documentation

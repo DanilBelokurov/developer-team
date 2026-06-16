@@ -11,15 +11,18 @@ All notable changes to devteam are documented in this file.
 - **State structure**: KV directories now mirror `.devteam/plans/` directories
 - All orchestrators updated to use plan-isolated KV keys
 
+## [6.4.2] — 2026-06-16 — Config directory
+
+### Changed
+- **Config files moved to `config/` directory**. Pipeline config files (*.yaml, *.md) now live at the root level in `config/`. Install copies them to `<target>/.qwen/.devteam/config/`.
+- **`.devteam/` now contains only runtime state** (`state/`, `plans/`).
+
 ## [6.4.0] — 2026-06-16 — Hooks/scripts in .devteam/
 
 ### Changed
-- **Hooks and scripts moved to `.devteam/`**. All hook scripts and utility scripts are now in `.devteam/`. Install copies them to:
-  - **Project-level**: `<project>/.devteam/` (sibling to `.qwen/`)
-  - **User-level**: `<target>/.qwen/.devteam/` (inside `.qwen/`)
-- **`install.sh`** updated: copies `.devteam/hooks/` and `.devteam/scripts/` to the appropriate location
-- **`uninstall.sh`** updated: removes `.devteam/hooks/` and `.devteam/scripts/` on uninstall
-- **Settings paths**: `settings.json` now references the correct absolute path for all hook commands
+- **Directory structure refactored**. Hooks and scripts now live at the root level (`hooks/`, `scripts/`) in the devTeam repository. Install copies them to `<target>/.qwen/.devteam/` (both project-level and user-level). Config files (`.devteam/*.yaml`, `.devteam/*.md`) are also copied to `<target>/.qwen/.devteam/`.
+- **`install.sh`** updated: creates `.devteam/` in target and copies hooks/, scripts/, and config files into it
+- **`uninstall.sh`** updated: removes the entire `<target>/.qwen/.devteam/` directory
 
 ## [6.3.0] — 2026-06-15 — Project-level install
 

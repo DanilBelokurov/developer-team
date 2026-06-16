@@ -810,13 +810,10 @@ devteam/
 ├── commands/devteam/           # 16 slash commands
 ├── skills/                     # 35 skills
 ├── agents/                     # 18 subagents (flat)
-├── .devteam/
-│   ├── hooks/                  # 9 scripts + shim + config
-│   ├── scripts/
-│   │   ├── sync-kotlin-skills.sh  # vendor → skills sync
-│   │   ├── dry-run.sh             # Shell mirror of pipeline
-│   │   └── state.sh / events.sh  # State management
-│   └── *.yaml                  # Config files
+├── hooks/                      # Hook scripts (installed to .devteam/hooks/)
+├── scripts/                    # Utility scripts (installed to .devteam/scripts/)
+├── config/                    # Pipeline config files (installed to .devteam/config/)
+└── .devteam/                 # Runtime state: state/, plans/ (gitignored)
 ├── vendors/                    # git submodule (kotlin skills)
 ├── docs/                       # User/dev documentation
 ├── tests/                      # Test suite

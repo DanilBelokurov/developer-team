@@ -21,9 +21,9 @@ These hooks integrate with Qwen Code's hook system to provide:
 ### Installation (install.sh)
 
 Hooks are installed via `install.sh`, which copies `agents/`, `commands/`,
-`skills/` to the target `.qwen/` directory, and `.devteam/hooks/` + `.devteam/scripts/`
-to the appropriate location (project-level: sibling to `.qwen/`, user-level: inside `.qwen/`).
-Hook configuration is deep-merged into `settings.json` with absolute paths.
+`skills/` to the target `.qwen/` directory, and `hooks/`, `scripts/`, and
+config files to `<target>/.qwen/.devteam/`. Hook configuration is deep-merged
+into `settings.json` with absolute paths.
 
 ```bash
 # Project-level (recommended): installs to <project>/.qwen/
@@ -37,9 +37,20 @@ bash install.sh
 1. Inside a git repo → `<cwd>/.qwen/`
 2. Outside git → `~/.qwen/`
 
+**Installed layout** (both project and user level):
+```
+<target>/.qwen/
+├── agents/, commands/, skills/
+├── settings.json
+└── .devteam/
+    ├── hooks/      # hook scripts
+    ├── scripts/    # utility scripts
+    └── config/     # pipeline config files
+```
+
 **Absolute paths**: All hook commands in `settings.json` use absolute paths
-(`<target>/hooks/run-hook.sh`), so they work regardless of how Qwen Code
-was launched.
+(`<target>/.qwen/.devteam/hooks/run-hook.sh`), so they work regardless of how
+Qwen Code was launched.
 
 ### Hook event reference
 

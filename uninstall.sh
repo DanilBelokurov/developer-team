@@ -93,7 +93,7 @@ rm -f "$SENTINEL"
 log_info "removed ${SENTINEL}"
 
 # ============================================================================
-# REMOVE agents/, commands/, skills/, hooks/
+# REMOVE agents/, commands/, skills/, .devteam/
 # ============================================================================
 
 echo ""
@@ -105,17 +105,11 @@ for dir in agents commands skills; do
     fi
 done
 
-# Remove .devteam/hooks and .devteam/scripts (configs stay for project-level)
-# Project-level: HOOKS_BASE was PROJECT_PATH/.devteam
-# User-level: HOOKS_BASE was TARGET/.devteam (which is ~/.qwen/.devteam)
-if [ -n "$PROJECT_PATH" ]; then
-    DEVTEAM_HOOKS="$(realpath "$PROJECT_PATH")/.devteam"
-else
-    DEVTEAM_HOOKS="${TARGET}/.devteam"
-fi
-if [ -d "${DEVTEAM_HOOKS}" ]; then
-    rm -rf "${DEVTEAM_HOOKS}/hooks" "${DEVTEAM_HOOKS}/scripts"
-    log_info "  removed ${DEVTEAM_HOOKS}/hooks/ and ${DEVTEAM_HOOKS}/scripts/"
+# Remove .devteam/ (hooks, scripts, configs, state)
+DEVTEAM_TARGET="${TARGET}/.devteam"
+if [ -d "${DEVTEAM_TARGET}" ]; then
+    rm -rf "${DEVTEAM_TARGET}"
+    log_info "  removed ${DEVTEAM_TARGET}/"
 fi
 
 # ============================================================================
@@ -139,24 +133,6 @@ if [ -f "${TARGET}/settings.json" ]; then
         mv "$tmp_file" "${TARGET}/settings.json"
         log_info "cleaned hooks from ${TARGET}/settings.json"
     fi
-fi
-
-# ============================================================================
-# REMOVE .devteam/ STATE
-# ============================================================================
-
-# Project-level: .devteam/ is sibling to .qwen/ at project root
-# User-level: .devteam/ is inside .qwen/
-if [ -n "$PROJECT_PATH" ]; then
-    DEVTEAM_STATE="${PROJECT_PATH}/.devteam"
-else
-    DEVTEAM_STATE="${TARGET}/.devteam"
-fi
-if [ -d "$DEVTEAM_STATE" ]; then
-    echo ""
-    echo "Removing DevTeam state..."
-    rm -rf "$DEVTEAM_STATE"
-    log_info "removed ${DEVTEAM_STATE}/"
 fi
 
 # ============================================================================
