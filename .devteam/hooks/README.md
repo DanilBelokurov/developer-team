@@ -21,8 +21,9 @@ These hooks integrate with Qwen Code's hook system to provide:
 ### Installation (install.sh)
 
 Hooks are installed via `install.sh`, which copies `agents/`, `commands/`,
-`skills/`, `hooks/` to the target `.qwen/` directory and deep-merges
-hook configuration into `settings.json`.
+`skills/` to the target `.qwen/` directory, and `.devteam/hooks/` + `.devteam/scripts/`
+to the appropriate location (project-level: sibling to `.qwen/`, user-level: inside `.qwen/`).
+Hook configuration is deep-merged into `settings.json` with absolute paths.
 
 ```bash
 # Project-level (recommended): installs to <project>/.qwen/

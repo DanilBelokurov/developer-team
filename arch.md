@@ -803,14 +803,14 @@ devteam/
 ├── commands/devteam/           # 16 slash commands
 ├── skills/                     # 35 skills
 ├── agents/                     # 18 subagents (flat)
-├── hooks/                      # 9 scripts + shim + config
-├── scripts/
-│   ├── sync-kotlin-skills.sh   # vendor → skills sync
-│   ├── dry-run.sh              # Shell mirror of pipeline
-│   ├── state.sh / events.sh / db-init.sh
-│   └── ...
+├── .devteam/
+│   ├── hooks/                  # 9 scripts + shim + config
+│   ├── scripts/
+│   │   ├── sync-kotlin-skills.sh  # vendor → skills sync
+│   │   ├── dry-run.sh             # Shell mirror of pipeline
+│   │   └── state.sh / events.sh  # State management
+│   └── *.yaml                  # Config files
 ├── vendors/                    # git submodule (kotlin skills)
-├── .devteam/                   # Runtime state (gitignored)
 ├── docs/                       # User/dev documentation
 ├── tests/                      # Test suite
 └── legacy/claude-code/         # Archived v5.0 files

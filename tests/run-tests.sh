@@ -178,7 +178,7 @@ setup_test_db() {
     mkdir -p "$DEVTEAM_DIR"
 
     # Initialize fresh state directory (file-based)
-    bash "$PROJECT_ROOT/scripts/state-init.sh" "$ROOT" > /dev/null 2>&1
+    bash "$PROJECT_ROOT/.devteam/scripts/state-init.sh" "$ROOT" > /dev/null 2>&1
 }
 
 teardown_test_db() {
@@ -234,7 +234,7 @@ test_state_management() {
 
     setup_test_db
     local _saved_script_dir="$SCRIPT_DIR"
-    source "$PROJECT_ROOT/scripts/state.sh"
+    source "$PROJECT_ROOT/.devteam/scripts/state.sh"
     SCRIPT_DIR="$_saved_script_dir"
 
     # Test session creation
@@ -348,7 +348,7 @@ test_sql_injection_prevention() {
 
     setup_test_db
     local _saved_script_dir="$SCRIPT_DIR"
-    source "$PROJECT_ROOT/scripts/state.sh"
+    source "$PROJECT_ROOT/.devteam/scripts/state.sh"
     SCRIPT_DIR="$_saved_script_dir"
 
     # Start a session for testing
@@ -417,9 +417,9 @@ test_event_logging() {
 
     setup_test_db
     local _saved_script_dir="$SCRIPT_DIR"
-    source "$PROJECT_ROOT/scripts/state.sh"
+    source "$PROJECT_ROOT/.devteam/scripts/state.sh"
     SCRIPT_DIR="$_saved_script_dir"
-    source "$PROJECT_ROOT/scripts/events.sh"
+    source "$PROJECT_ROOT/.devteam/scripts/events.sh"
 
     # Start a session
     local session_id
@@ -459,10 +459,10 @@ test_event_logging() {
 test_file_structure() {
     log_test "Testing project file structure..."
 
-    assert_file_exists "$PROJECT_ROOT/scripts/state.sh" "scripts/state.sh should exist"
-    assert_file_exists "$PROJECT_ROOT/scripts/events.sh" "scripts/events.sh should exist"
-    assert_file_exists "$PROJECT_ROOT/scripts/state-init.sh" "scripts/state-init.sh should exist"
-    assert_file_exists "$PROJECT_ROOT/scripts/lib/common.sh" "scripts/lib/common.sh should exist"
+    assert_file_exists "$PROJECT_ROOT/.devteam/scripts/state.sh" "scripts/state.sh should exist"
+    assert_file_exists "$PROJECT_ROOT/.devteam/scripts/events.sh" "scripts/events.sh should exist"
+    assert_file_exists "$PROJECT_ROOT/.devteam/scripts/state-init.sh" "scripts/state-init.sh should exist"
+    assert_file_exists "$PROJECT_ROOT/.devteam/scripts/lib/common.sh" "scripts/lib/common.sh should exist"
 
     # Check agents directory
     local agent_count
@@ -565,7 +565,7 @@ run_all_tests() {
     echo "============================================"
     echo ""
 
-    source "$PROJECT_ROOT/scripts/lib/common.sh"
+    source "$PROJECT_ROOT/.devteam/scripts/lib/common.sh"
 
     test_common_library
     echo ""

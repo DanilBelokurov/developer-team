@@ -2,6 +2,16 @@
 
 All notable changes to devteam are documented in this file.
 
+## [6.4.0] — 2026-06-16 — Hooks/scripts in .devteam/
+
+### Changed
+- **Hooks and scripts moved to `.devteam/`**. All hook scripts and utility scripts are now in `.devteam/`. Install copies them to:
+  - **Project-level**: `<project>/.devteam/` (sibling to `.qwen/`)
+  - **User-level**: `<target>/.qwen/.devteam/` (inside `.qwen/`)
+- **`install.sh`** updated: copies `.devteam/hooks/` and `.devteam/scripts/` to the appropriate location
+- **`uninstall.sh`** updated: removes `.devteam/hooks/` and `.devteam/scripts/` on uninstall
+- **Settings paths**: `settings.json` now references the correct absolute path for all hook commands
+
 ## [6.3.0] — 2026-06-15 — Project-level install
 
 ### Added

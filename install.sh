@@ -5,8 +5,8 @@
 set -euo pipefail
 
 PLUGIN_DIR="$(cd "$(dirname "$0")" && pwd)"
-SCRIPT_DIR="${PLUGIN_DIR}/hooks"
-CONFIG_FILE="${PLUGIN_DIR}/hooks/hooks-config.json"
+SCRIPT_DIR="${PLUGIN_DIR}/.devteam/hooks"
+CONFIG_FILE="${PLUGIN_DIR}/.devteam/hooks/hooks-config.json"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -100,6 +100,15 @@ fi
 TARGET="$(resolve_target "$PROJECT_PATH")"
 SENTINEL="${TARGET}/.devteam-installed"
 
+# Hooks/scripts base: inside .qwen/ for user-level, sibling .devteam/ for project-level
+if [ -n "$PROJECT_PATH" ]; then
+    # Project-level: hooks/scripts live in PROJECT_PATH/.devteam/ (sibling to .qwen/)
+    HOOKS_BASE="$(realpath "$PROJECT_PATH")/.devteam"
+else
+    # User-level: hooks/scripts live inside TARGET/.qwen/.devteam/
+    HOOKS_BASE="${TARGET}/.devteam"
+fi
+
 # ============================================================================
 # IDEMPOTENCY CHECK
 # ============================================================================
@@ -140,16 +149,27 @@ mkdir -p "${TARGET}"
 # ============================================================================
 
 echo ""
-echo "Copying agents/, commands/, skills/, hooks/ to ${TARGET}..."
+echo "Copying agents/, commands/, skills/ and .devteam/ to ${TARGET}..."
 
-for dir in agents commands skills hooks; do
+# Copy agents, commands, skills to .qwen/
+for dir in agents commands skills; do
     if [ -d "${PLUGIN_DIR}/${dir}" ]; then
         rm -rf "${TARGET}/${dir}"
         cp -r "${PLUGIN_DIR}/${dir}" "${TARGET}/${dir}"
-        count=$(find "${TARGET}/${dir}" -name '*.md' -o -name '*.sh' -o -name '*.js' -o -name '*.ps1' 2>/dev/null | wc -l | tr -d ' ')
+        count=$(find "${TARGET}/${dir}" -name '*.md' 2>/dev/null | wc -l | tr -d ' ')
         log_info "  ${dir}/ — ${count} files"
     fi
 done
+
+# Copy .devteam/hooks/ and .devteam/scripts/ to HOOKS_BASE
+mkdir -p "${HOOKS_BASE}"
+rm -rf "${HOOKS_BASE}/hooks" "${HOOKS_BASE}/scripts"
+cp -r "${PLUGIN_DIR}/.devteam/hooks" "${HOOKS_BASE}/hooks"
+cp -r "${PLUGIN_DIR}/.devteam/scripts" "${HOOKS_BASE}/scripts"
+count_hooks=$(find "${HOOKS_BASE}/hooks" -name '*.sh' -o -name '*.js' -o -name '*.ps1' 2>/dev/null | wc -l | tr -d ' ')
+count_scripts=$(find "${HOOKS_BASE}/scripts" -name '*.sh' 2>/dev/null | wc -l | tr -d ' ')
+log_info "  .devteam/hooks/ — ${count_hooks} scripts"
+log_info "  .devteam/scripts/ — ${count_scripts} scripts"
 
 # ============================================================================
 # MERGE HOOKS INTO settings.json
@@ -160,7 +180,7 @@ echo "Installing hooks into ${TARGET}/settings.json..."
 
 # Substitute __HOOK_BASE__ placeholder with absolute path
 # Use perl for cross-platform sed compatibility (macOS sed doesn't handle / in paths well)
-HOOK_CONFIG="$(perl -pe "s|__HOOK_BASE__|${TARGET}/hooks|g" "$CONFIG_FILE")"
+HOOK_CONFIG="$(perl -pe "s|__HOOK_BASE__|${HOOKS_BASE}/hooks|g" "$CONFIG_FILE")"
 
 if [ ! -f "${TARGET}/settings.json" ]; then
     echo "$HOOK_CONFIG" > "${TARGET}/settings.json"
@@ -227,12 +247,12 @@ log_info "created ${SENTINEL}"
 echo ""
 echo "Installation complete!"
 echo ""
-echo "  Target:   ${TARGET}"
-echo "  Hooks:    ${TARGET}/settings.json"
-echo "  Agents:   ${TARGET}/agents/    ($(find "${TARGET}/agents" -name '*.md' 2>/dev/null | wc -l | tr -d ' ') files)"
-echo "  Commands: ${TARGET}/commands/   ($(find "${TARGET}/commands" -name '*.md' 2>/dev/null | wc -l | tr -d ' ') files)"
-echo "  Skills:   ${TARGET}/skills/     ($(find "${TARGET}/skills" -name '*.md' 2>/dev/null | wc -l | tr -d ' ') files)"
-echo "  Hooks:    ${TARGET}/hooks/      ($(find "${TARGET}/hooks" -name '*.sh' 2>/dev/null | wc -l | tr -d ' ') scripts)"
+echo "  Target:      ${TARGET}"
+echo "  Hooks:       ${TARGET}/settings.json"
+echo "  Agents:      ${TARGET}/agents/    ($(find "${TARGET}/agents" -name '*.md' 2>/dev/null | wc -l | tr -d ' ') files)"
+echo "  Commands:    ${TARGET}/commands/   ($(find "${TARGET}/commands" -name '*.md' 2>/dev/null | wc -l | tr -d ' ') files)"
+echo "  Skills:      ${TARGET}/skills/     ($(find "${TARGET}/skills" -name '*.md' 2>/dev/null | wc -l | tr -d ' ') files)"
+echo "  .devteam/:   ${HOOKS_BASE}   (hooks, scripts)"
 echo ""
 echo "Next steps:"
 echo "  1. Restart Qwen Code to load the extension"

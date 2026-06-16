@@ -98,12 +98,25 @@ log_info "removed ${SENTINEL}"
 
 echo ""
 echo "Removing DevTeam files..."
-for dir in agents commands skills hooks; do
+for dir in agents commands skills; do
     if [ -d "${TARGET}/${dir}" ]; then
         rm -rf "${TARGET}/${dir}"
         log_info "  removed ${TARGET}/${dir}/"
     fi
 done
+
+# Remove .devteam/hooks and .devteam/scripts (configs stay for project-level)
+# Project-level: HOOKS_BASE was PROJECT_PATH/.devteam
+# User-level: HOOKS_BASE was TARGET/.devteam (which is ~/.qwen/.devteam)
+if [ -n "$PROJECT_PATH" ]; then
+    DEVTEAM_HOOKS="$(realpath "$PROJECT_PATH")/.devteam"
+else
+    DEVTEAM_HOOKS="${TARGET}/.devteam"
+fi
+if [ -d "${DEVTEAM_HOOKS}" ]; then
+    rm -rf "${DEVTEAM_HOOKS}/hooks" "${DEVTEAM_HOOKS}/scripts"
+    log_info "  removed ${DEVTEAM_HOOKS}/hooks/ and ${DEVTEAM_HOOKS}/scripts/"
+fi
 
 # ============================================================================
 # REMOVE devteam HOOKS FROM settings.json

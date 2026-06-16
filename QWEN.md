@@ -165,7 +165,7 @@ with a structured failure report.
 - Hooks: `~/.qwen/settings.json` (managed by `install.sh`, shell + jq)
 
 v6.1 used SQLite; v6.2 replaced with file-based state for zero
-external dependencies. See `scripts/state-structure.md` for full layout.
+external dependencies. See `.devteam/scripts/state-structure.md` for full layout.
 
 The `Stop` hook blocks session exit until `TASK_COMPLETE: <id>` and
 `EXIT_SIGNAL: true` are emitted.
@@ -200,14 +200,14 @@ quality_gates:
 - 18 active subagents in `agents/`
 - 16 slash commands in `commands/devteam/`
 - 35 skills in `skills/`
-- 25 upstream skills (synced via `scripts/sync-kotlin-skills.sh`)
+- 25 upstream skills (synced via `.devteam/scripts/sync-kotlin-skills.sh`)
 - Detailed architecture: `arch.md`
 - Migration notes: `docs/MIGRATION_FROM_CLAUDE.md` and
   `legacy/claude-code/MIGRATION_REFERENCE.md`
 
 ## Do NOT
 
-- Edit `.devteam/devteam.db` directly (use `scripts/state.sh`)
+- Edit `.devteam/devteam.db` directly (use `.devteam/scripts/state.sh`)
 - Override `model:` field in agent frontmatter (Qwen Code picks)
 - Re-implement orchestration logic — delegate to the stage orchestrators
 - Modify files outside an agent's partition in Stage 2 (orchestrator will revert)

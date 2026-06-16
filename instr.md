@@ -93,7 +93,7 @@ cd devteam
 git submodule update --init --recursive
 
 # 3. Синхронизируем upstream скилы
-bash scripts/sync-kotlin-skills.sh
+bash .devteam/scripts/sync-kotlin-skills.sh
 # Output: "Done. 25 skills"
 
 # 4. Устанавливаем расширение (project-level или user-level)
@@ -598,7 +598,7 @@ SQL queries, нет transactional semantics. Для масштаба DevTeam
 
 ```bash
 # 1. Recommended: конвертация
-bash scripts/state-migrate-v61-to-v62.sh
+bash .devteam/scripts/state-migrate-v61-to-v62.sh
 
 # 2. Alternative: начать с нуля (state в gitignore, потеря не критична)
 rm .devteam/devteam.db
