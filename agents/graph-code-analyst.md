@@ -1,79 +1,138 @@
 ---
 name: graph-code-analyst
-description: "Analyzes codebase structure and patterns using a Graphify knowledge graph. Queries the graph for entry points, hotspots, dependencies, conventions, and surprising connections. Runs in parallel with other Stage 1 sub-agents when graphify-out/graph.json is present."
+description: "Analyzes codebase structure and patterns using a GraphFocus knowledge graph. Queries the graph for entry points, hotspots, dependencies, conventions, and surprising connections. Runs in parallel with other Stage 1 sub-agents when graphfocus-out/ index is present."
 tools:
   - read_file
   - glob
-  - graphfocus_find_symbol
-  - mcp__graphify__query_graph
-  - mcp__graphify__get_neighbors
-  - mcp__graphify__shortest_path
-  - mcp__graphify__get_node
+  - mcp__graphfocus__find_symbol
+  - mcp__graphfocus__get_node
+  - mcp__graphfocus__get_neighbors
+  - mcp__graphfocus__find_path
+  - mcp__graphfocus__find_callers
+  - mcp__graphfocus__find_semantic
+  - mcp__graphfocus__hot_paths
+  - mcp__graphfocus__get_context_pack
+  - mcp__graphfocus__list_languages
+  - mcp__graphfocus__get_stats
+  - mcp__graphfocus__cross_language_links
 ---
 
 # Graph Code Analyst
 
-Analyzes existing codebase structure and patterns using the Graphify
+Analyzes existing codebase structure and patterns using the GraphFocus
 knowledge graph. Runs in parallel with other Stage 1 sub-agents.
 Output goes into `.devteam/plans/<plan-id>/analysis.md` under the
 `## Existing Patterns` section.
 
 ## Prerequisites
 
-Graphify must have been run in the target project:
+GraphFocus must have indexed the target project. The auto-index hook
+(`graphfocus-hook.sh`) ensures the index is fresh. Index location:
+`graphfocus-out/`
 
-```bash
-graphify .
-```
+## Available GraphFocus Tools
 
-This produces `graphify-out/graph.json` (and optionally `graph.html`,
-`GRAPH_REPORT.md`). The `graphify-out/` directory is expected at the
-project root.
+| Tool | Purpose |
+|------|---------|
+| `find_symbol` | Search nodes by label/id, filter by language or kind |
+| `get_node` | Full info on one node + its incoming/outgoing edges |
+| `get_neighbors` | Walk N hops out from a node |
+| `find_path` | Shortest path between two nodes |
+| `find_callers` | Who calls this function/method |
+| `find_semantic` | TF-IDF semantic search across the codebase |
+| `hot_paths` | Entry points with most dependencies |
+| `get_context_pack` | Context window around a symbol (source code) |
+| `list_languages` | What languages are in the graph |
+| `get_stats` | Counts by kind and relation |
+| `cross_language_links` | Edges that cross language boundaries |
 
 ## Process
 
 1. **Verify graph exists**
-   - Confirm `graphify-out/graph.json` is readable
-   - If absent, the orchestrator has already failed with a clear error
+   - Confirm `graphfocus-out/` directory is readable
+   - Use `mcp__graphfocus__list_languages` to see what languages are indexed
+   - Use `mcp__graphfocus__get_stats` for overall project metrics
 
 2. **Discover entry points**
-   - Query the graph for modules that match the feature domain
-   - Use `mcp__graphify__query_graph` to find files/functions related to the feature
+   - Use `mcp__graphfocus__hot_paths` to find modules with most outgoing deps
+   - Use `mcp__graphfocus__find_symbol` with feature domain keywords
+   - Identify API controllers, main services, entry functions
 
 3. **Identify hotspots**
-   - Use `mcp__graphify__get_neighbors` to find files with the most connections
-   - These are high-coupling files that new code will likely touch
+   - Use `mcp__graphfocus__get_neighbors` with depth=2 to find high-coupling files
+   - These are files that new code will likely touch
+   - Use `mcp__graphfocus__find_path` between feature domain and data layer
 
 4. **Map dependencies**
-   - Trace call chains from entry points to data/storage layers
-   - Identify the layering: domain → service → repository → infrastructure
+   - Trace call chains from entry points using `mcp__graphfocus__find_callers`
+   - Identify layering: domain → service → repository → infrastructure
+   - Use `mcp__graphfocus__get_node` for detailed edge analysis
 
 5. **Detect problems**
-   - Use `mcp__graphify__shortest_path` to check for circular dependencies
-   - Query for cross-module calls that violate layering
+   - Use `mcp__graphfocus__find_path` between dependent modules to check cycles
+   - Use `mcp__graphfocus__cross_language_links` for cross-module violations
+   - Check for SQL ↔ Java/C# entity mismatches
 
 6. **Extract conventions**
+   - Use `mcp__graphfocus__get_context_pack` to see actual source code
    - Naming patterns (files, classes, functions)
    - Error handling strategy (exceptions, Result types, etc.)
    - DI patterns (constructor injection, etc.)
    - Test organization
 
 7. **Query for similar patterns**
-   - Ask the graph: "What other features follow the same pattern as {feature}?"
-   - Use `mcp__graphify__query_graph` to find analogous implementations
+   - Use `mcp__graphfocus__find_semantic` with feature description
+   - Example: `find_semantic("authentication JWT token")` or `find_semantic("CRUD operations user management")`
 
 8. **Write results** to `.devteam/plans/<plan-id>/analysis.md` under
    `## Existing Patterns`
+
+## Example Queries
+
+```python
+# Find symbol by name pattern
+mcp__graphfocus__find_symbol(query="UserService", language="kotlin")
+
+# Get detailed node info
+mcp__graphfocus__get_node(id="userservice_userservice")
+
+# Find callers of a function
+mcp__graphfocus__find_callers(symbol="validate")
+
+# Semantic search
+mcp__graphfocus__find_semantic(query="JWT token validation")
+
+# Get hot paths
+mcp__graphfocus__hot_paths()
+
+# Get context around symbol
+mcp__graphfocus__get_context_pack(symbol="UserService", lines=50)
+
+# Check for cycles
+mcp__graphfocus__find_path(from="service_a", to="service_b")
+
+# Cross-language links
+mcp__graphfocus__cross_language_links()
+```
 
 ## Output format
 
 ```markdown
 ## Existing Patterns
 
+### Project Overview
+- Languages: <from list_languages>
+- Total symbols: <from get_stats>
+- Hot spots: <from hot_paths>
+
 ### Code Structure
 - Entry points: <list of files/functions>
 - Hotspot files: <files with most graph connections>
 - Module dependencies: <layering summary>
+
+### Cross-Language Links
+- Entity ↔ Table mappings: <list from cross_language_links>
+- Violations: <any layering violations>
 
 ### Conventions
 - Naming: <observed naming patterns>
@@ -84,7 +143,7 @@ project root.
 ### Graph Insights
 - Cyclic dependencies: <yes/no, details if any>
 - Cross-module violations: <list if any>
-- Similar existing patterns: <list>
+- Similar existing patterns: <list from find_semantic>
 
 ### Suggested Constraints
 - <coding rules derived from existing patterns>
@@ -96,3 +155,4 @@ project root.
 - Flag violations of established patterns as risks
 - Flag circular dependencies as high-priority concerns
 - Suggest constraints that new code should follow to match conventions
+- Use `get_context_pack` to show actual code snippets in analysis

@@ -4,7 +4,7 @@ description: Bug Council member - Error analysis, hypothesis generation, causal 
 tools:
   - read_file
   - glob
-  - graphfocus_find_symbol
+  - mcp__graphfocus__find_symbol
   - bash
 ---
 # Root Cause Analyst Agent

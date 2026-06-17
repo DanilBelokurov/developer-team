@@ -4,7 +4,7 @@ description: Controls autonomous execution mode with stop hooks and persistence
 tools:
   - read_file
   - glob
-  - graphfocus_find_symbol
+  - mcp__graphfocus__find_symbol
   - bash
   - agent
 ---

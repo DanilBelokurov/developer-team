@@ -4,7 +4,7 @@ description: Quality gate with strict acceptance criteria validation
 tools:
   - read_file
   - glob
-  - graphfocus_find_symbol
+  - mcp__graphfocus__find_symbol
   - bash
 ---
 # Requirements Validator Agent

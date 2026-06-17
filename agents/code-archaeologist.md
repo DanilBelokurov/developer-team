@@ -2,9 +2,9 @@
 name: code-archaeologist
 description: Bug Council member - Git history, regression detection, blame analysis
 tools:
+  - mcp__graphfocus__find_symbol
   - read_file
   - glob
-  - graphfocus_find_symbol
   - bash
 ---
 # Code Archaeologist Agent

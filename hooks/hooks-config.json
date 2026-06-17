@@ -2,7 +2,7 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "find_symbol|get_neighbors|find_callers|find_path|find_semantic|get_context_pack|hot_paths|cross_language_links",
+        "matcher": "mcp__graphfocus__",
         "hooks": [
           {
             "type": "command",

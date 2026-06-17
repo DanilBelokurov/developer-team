@@ -56,7 +56,7 @@ Qwen Code was launched.
 
 | Event | Used by | Purpose |
 |---|---|---|
-| `PreToolUse` (graphfocus_*) | `graphfocus-hook.sh` | Auto-update graphfocus index |
+| `PreToolUse` (mcp__graphfocus__) | `graphfocus-hook.sh` | Auto-update graphfocus index |
 | `PreToolUse` (Edit\|Write, Bash) | `pre-tool-use-hook.sh` | Scope check, dangerous-command block |
 | `PostToolUse` (Edit\|Write, Bash) | `post-tool-use-hook.sh` | Track changes, detect gates |
 | `Stop` (`*`) | `stop-hook.sh` | Block exit w/o `EXIT_SIGNAL: true` |
