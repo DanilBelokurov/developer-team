@@ -184,7 +184,10 @@ echo "Installing hooks into ${TARGET}/settings.json..."
 
 # Substitute __HOOK_BASE__ placeholder with absolute path
 # Use perl for cross-platform sed compatibility (macOS sed doesn't handle / in paths well)
-HOOK_CONFIG="$(perl -pe "s|__HOOK_BASE__|${DEVTEAM_TARGET}/hooks|g" "$CONFIG_FILE")"
+# Escape @ for perl (it interprets @ as array start, e.g. /path/@user/ becomes /path/)
+HOOK_PATH="${DEVTEAM_TARGET}/hooks"
+HOOK_PATH="${HOOK_PATH//@/\\@}"
+HOOK_CONFIG="$(perl -pe "s|__HOOK_BASE__|${HOOK_PATH}|g" "$CONFIG_FILE")"
 
 if [ ! -f "${TARGET}/settings.json" ]; then
     echo "$HOOK_CONFIG" > "${TARGET}/settings.json"
