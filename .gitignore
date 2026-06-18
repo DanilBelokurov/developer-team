@@ -412,3 +412,7 @@ tests/**
 
 # auto-skills
 .qwen/skills/auto-*
+
+# [epiq]: local hydrated state is never committed
+.epiq/events/
+.epiq/log/
