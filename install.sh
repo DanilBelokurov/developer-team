@@ -196,7 +196,13 @@ else
     tmp_file="$(mktemp)"
     trap "rm -f '$tmp_file'" EXIT
 
-    jq --argjson newcfg "$HOOK_CONFIG" '
+    # Handle empty settings.json by treating it as {}
+    EXISTING_CONFIG="$(cat "${TARGET}/settings.json")"
+    if [ -z "$EXISTING_CONFIG" ]; then
+        EXISTING_CONFIG="{}"
+    fi
+
+    jq --argjson newcfg "$HOOK_CONFIG" --argjson existing "$EXISTING_CONFIG" '
       def deep_merge($a; $b):
         if ($a | type) == "object" and ($b | type) == "object" then
           ($a | keys) as $akeys | ($b | keys) as $bkeys |
@@ -214,8 +220,8 @@ else
         else
           ($b // $a)
         end;
-      deep_merge(.; $newcfg)
-    ' "${TARGET}/settings.json" > "$tmp_file"
+      deep_merge($existing; $newcfg)
+    ' <<< '{}' > "$tmp_file"
 
     mv "$tmp_file" "${TARGET}/settings.json"
     log_info "merged hooks into ${TARGET}/settings.json"
