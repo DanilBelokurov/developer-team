@@ -82,6 +82,21 @@ bash install.sh
 # 5. Перезапускаем Qwen Code (настройки применяются при перезапуске)
 ```
 
+### Два сценария установки
+
+| | `bash install.sh` | `qwen extensions install` (манифест) |
+|---|---|---|
+| **Что делает** | Копирует файлы + интегрирует hooks + инициализирует state | Декларирует ассеты + автозапуск MCP servers |
+| **Hooks** | ✅ Все 11 хуков активны | ❌ Не поддерживаются |
+| **State** | ✅ Инициализируется | ❌ Не создаётся |
+| **MCP servers** | ❌ Не настраиваются | ✅ github, memory, semgrep, graphfocus |
+| **Idempotency** | ✅ Sentinel-файл | ❌ Нет |
+| **Изоляция** | Project-level (рекомендуется) | Только user-level |
+
+**Рекомендация:** используйте `bash install.sh` для полной функциональности.
+MCP servers (github, memory, semgrep) можно подключить вручную через
+`settings.json` или после установки расширения через Qwen Code.
+
 **Project-level vs User-level:**
 - `bash install.sh /path/to/project` → устанавливает в `<project>/.qwen/`
   (`.devteam/` создаётся рядом с `.qwen/` — в корне проекта)
