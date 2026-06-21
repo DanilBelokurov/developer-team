@@ -2,7 +2,7 @@
 name: devteam-install-workflow
 description: Project-level + user-level install/uninstall workflow with sentinel-based idempotency and absolute hook paths
 source: auto-skill
-extracted_at: '2026-06-15T19:21:37.571Z'
+extracted_at: '2026-21T19:07:35.961Z'
 ---
 
 # DevTeam Install/Uninstall Workflow
@@ -19,6 +19,44 @@ The install script must:
 3. Be idempotent (second run = no-op)
 4. Use absolute paths for hook commands in `settings.json`
 5. Mirror the same target resolution in uninstall
+
+## Initial Setup: vendors/ (optional, for syncing upstream skills)
+
+`vendors/kotlin-backend-agent-skills/` is a **git submodule** containing 25 upstream Kotlin skills from https://github.com/yalishevant/kotlin-backend-agent-skills. It is **NOT used by `install.sh`** — it only feeds `sync-kotlin-skills.sh`.
+
+**Data flow:**
+
+```
+vendors/kotlin-backend-agent-skills/   ← upstream (git submodule)
+         ↓ scripts/sync-kotlin-skills.sh
+skills/kotlin/                         ← local copy (in repo)
+         ↓ install.sh
+.qwen/skills/                          ← install target
+```
+
+**Setup (one-time, before install):**
+
+```bash
+git submodule update --init --recursive
+bash scripts/sync-kotlin-skills.sh
+# Output: "Done. 25 skills synced"
+```
+
+**When `vendors/` is safe to delete:**
+
+- ✅ `skills/kotlin/` already contains all 25 synced skill files
+- ✅ You do not plan to update skills from upstream
+
+- ❌ `skills/kotlin/` is empty (fresh clone) — you need `vendors/` to populate it first
+
+**After deleting `vendors/`:**
+
+```bash
+# To update skills from upstream again, re-add the submodule:
+git submodule add https://github.com/yalishevant/kotlin-backend-agent-skills vendors/kotlin-backend-agent-skills
+git submodule update --init --recursive
+bash scripts/sync-kotlin-skills.sh
+```
 
 ## Solution
 

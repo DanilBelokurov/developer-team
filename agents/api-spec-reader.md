@@ -22,8 +22,6 @@ The orchestrator activates this agent only if any of these files exist:
 - `**/swagger.yaml`
 - `**/swagger.json`
 
-(Excluding `vendors/` to avoid scanning our vendor skills.)
-
 ## Process
 
 1. Find the spec file

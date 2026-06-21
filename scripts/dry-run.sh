@@ -78,10 +78,10 @@ is_skipped() {
 # Predicates (mirror of build.md logic)
 HYBRID=false
 if [ -d .git ]; then HYBRID=true; fi
-if find . -path ./vendors -prune -o -name "*.kt" -print 2>/dev/null | grep -q .; then HYBRID=true; fi
+if find . -name "*.kt" -print 2>/dev/null | grep -q .; then HYBRID=true; fi
 
 HAS_SPEC=false
-for f in $(find . -path ./vendors -prune -o \( -name "openapi.yml" -o -name "openapi.yaml" -o -name "openapi.json" -o -name "swagger.yml" -o -name "swagger.yaml" -o -name "swagger.json" \) -print 2>/dev/null); do
+for f in $(find . \( -name "openapi.yml" -o -name "openapi.yaml" -o -name "openapi.json" -o -name "swagger.yml" -o -name "swagger.yaml" -o -name "swagger.json" \) -print 2>/dev/null); do
   HAS_SPEC=true
   break
 done

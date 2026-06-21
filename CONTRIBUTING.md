@@ -1,50 +1,50 @@
-# Contributing to DevTeam
+# Вклад в DevTeam
 
-Thank you for your interest in contributing to DevTeam for Qwen Code.
+Спасибо за интерес к DevTeam для Qwen Code.
 
-## Development Setup
+## Настройка окружения разработки
 
 ```bash
-git clone https://github.com/michael-harris/devteam.git
+git clone ?
 cd devteam
 
-# Install the extension (project-level or user-level)
-# For live development: install into the devteam repo itself
+# Установка расширения (project-level или user-level)
+# Для live-разработки: установить в сам репозиторий devteam
 bash install.sh           # user-level
-# or project-level:
+# или project-level:
 bash install.sh /path/to/devteam
 ```
 
-**Note**: For live development, install into the devteam directory itself:
+**Примечание**: Для live-разработки установите в директорию devteam:
 ```bash
 bash install.sh "$(pwd)"
 ```
 
-Prerequisites: Python 3.7+, jq, git, optional Node.js + npx for MCP servers.
+Зависимости: Python 3.7+, jq, git, опционально Node.js + npx для MCP-серверов.
 
-## Project Structure
+## Структура проекта
 
 ```
 devteam/
-├── qwen-extension.json      # Extension manifest
-├── QWEN.md                  # Auto-loaded context for the model
-├── commands/devteam/        # Slash commands (16)
-├── skills/                  # Skill files (12)
-├── agents/                  # Subagent definitions (18)
-├── hooks/                   # Hook scripts (9 .sh + run-hook.sh shim)
+├── qwen-extension.json      # Манифест расширения
+├── QWEN.md               # Автозагружаемый контекст для модели
+├── commands/devteam/        # Slash-команды (16)
+├── skills/                  # Файлы скилов (12)
+├── agents/                  # Определения сабагентов (18)
+├── hooks/                   # Hook-скрипты (9 .sh + run-hook.sh shim)
 ├── scripts/                 # State, events, DB, schema
-├── config/                  # Pipeline config files (*.yaml, *.md)
-└── .devteam/                # Runtime state (gitignored)
-├── tests/                   # Test suite
-├── examples/                # Usage examples
-├── docs/                    # User and developer documentation
-└── legacy/claude-code/      # Original Claude Code files (archive)
+├── config/                  # Файлы конфигурации пайплайна (*.yaml, *.md)
+└── .devteam/               # Runtime state (gitignored)
+├── tests/                   # Тестовый набор
+├── examples/                # Примеры использования
+├── docs/                    # Пользовательская и разработческая документация
+└── legacy/claude-code/      # Оригинальные файлы Claude Code (архив)
 ```
 
-## Adding a Subagent
+## Добавление сабагента
 
-1. Choose a kebab-case name (e.g. `database-optimizer`).
-2. Create `agents/<name>.md` with the frontmatter template:
+1. Выберите имя в kebab-case (например, `database-optimizer`).
+2. Создайте `agents/<name>.md` по шаблону frontmatter:
 
    ```yaml
    ---
@@ -65,22 +65,22 @@ devteam/
    ...
    ```
 
-   **Required frontmatter fields** (validated by Qwen Code, see
-   `docs/features/skills.md` for the equivalent skill rules):
-   - `name` — kebab-case, unique
-   - `description` — what the agent does and when to use it
-   - `tools` — list of tool names the agent can use
+   **Обязательные поля frontmatter** (валидируются Qwen Code, см.
+   `docs/features/skills.md` для эквивалентных правил скилов):
+   - `name` — kebab-case, уникальное
+   - `description` — что делает агент и когда его использовать
+   - `tools` — список имён инструментов, доступных агенту
 
-3. Body: write the agent's role, capabilities, process, and output format
-   in clear Markdown. Qwen Code will read this verbatim and use it as the
-   subagent's system prompt.
+3. Тело: напишите роль, возможности, процесс и формат вывода агента
+   в чистом Markdown. Qwen Code прочитает это как есть и использует как
+   system prompt сабагента.
 
-4. Test by invoking `/agents manage` in Qwen Code, or by asking a
-   question that matches the description — the model should delegate.
+4. Тестируйте через `/agents manage` в Qwen Code или задайте вопрос,
+   соответствующий описанию — модель должна делегировать задачу.
 
-## Adding a Slash Command
+## Добавление slash-команды
 
-1. Create `commands/devteam/<command-name>.md`:
+1. Создайте `commands/devteam/<command-name>.md`:
 
    ```markdown
    ---
@@ -94,15 +94,15 @@ devteam/
    ...
    ```
 
-2. Validated fields:
-   - `description` — required
-   - `argument-hint` — optional; for UI hints only
+2. Валидируемые поля:
+   - `description` — обязательное
+   - `argument-hint` — опциональное; только для подсказок UI
 
-3. The command becomes available as `/devteam:command-name`.
+3. Команда станет доступна как `/devteam:command-name`.
 
-## Adding a Skill
+## Добавление скила
 
-1. Create `skills/<skill-name>/SKILL.md`:
+1. Создайте `skills/<skill-name>/SKILL.md`:
 
    ```yaml
    ---
@@ -117,69 +117,66 @@ devteam/
    ...
    ```
 
-2. Validated fields (see `docs/features/skills.md`):
-   - `name` — kebab-case, unique, validated against
+2. Валидируемые поля (см. `docs/features/skills.md`):
+   - `name` — kebab-case, уникальное, валидируется по шаблону
      `/^[\p{L}\p{N}_:.-]+$/u`
-   - `description` — non-empty
-   - `priority` — optional finite number
+   - `description` — непустое
+   - `priority` — опциональное конечное число
 
-3. Skills are **model-invoked**: Qwen Code activates them automatically
-   when the description matches the user's request. Users can also run
-   `/skills <name>` to invoke explicitly.
+3. Скилы — **model-invoked**: Qwen Code активирует их автоматически,
+   когда описание совпадает с запросом пользователя. Пользователи также
+   могут выполнить `/skills <name>` для явного вызова.
 
-## Adding a Hook
+## Добавление хука
 
-1. Create `hooks/<event-name>.sh` (or `.ps1` for Windows).
-2. The script receives input from Qwen Code via stdin (JSON). If you
-   need the legacy env-var contract (`CLAUDE_TOOL_NAME`, etc.), invoke
-   through `hooks/run-hook.sh` which maps Qwen Code's stdin JSON to those
-   env vars automatically.
-3. Exit codes:
-   - `0` — success, continue
-   - `2` — blocking error; stderr is shown to the model
-   - other — non-blocking error; execution continues
-4. Add a fragment to `hooks/hooks-config.json` describing when the hook
-   fires (event, matcher, type=command, command).
-5. Test by triggering the event and inspecting the hook's output.
+1. Создайте `hooks/<event-name>.sh` (или `.ps1` для Windows).
+2. Скрипт получает ввод от Qwen Code через stdin (JSON). Если нужен
+   legacy-контракт env-переменных (`CLAUDE_TOOL_NAME` и т.д.),
+   вызывайте через `hooks/run-hook.sh`, который маппит stdin JSON в
+   эти env-переменные автоматически.
+3. Коды завершения:
+   - `0` — успех, продолжить
+   - `2` — блокирующая ошибка; stderr показывается модели
+   - другое — неблокирующая ошибка; выполнение продолжается
+4. Добавьте фрагмент в `hooks/hooks-config.json`, описывающий когда
+   хук срабатывает (event, matcher, type=command, command).
+5. Тестируйте, вызывая событие и проверяя вывод хука.
 
-## Code Style
+## Стиль кода
 
-- Shell scripts: `set -euo pipefail`, `local` for function vars,
-  snake_case functions, UPPER_SNAKE_CASE constants.
-- Markdown: clear imperative language, code fences for commands, no
-  Claude Code references (use `$QWEN_PROJECT_DIR`, `qwen extensions …`).
+- Shell-скрипты: `set -euo pipefail`, `local` для переменных функций,
+  snake_case для функций, UPPER_SNAKE_CASE для констант.
+- Markdown: чёткий императивный язык, code fences для команд, без
+  ссылок на Claude Code (используйте `$QWEN_PROJECT_DIR`,
+  `qwen extensions …`).
 
-## Tests
+## Тесты
 
 ```bash
-bash tests/run-tests.sh                                  # existing shell tests
-bash install.sh                                          # second run is no-op (idempotency)
-bash install.sh /tmp/dt-test                             # project-level test
-bash uninstall.sh /tmp/dt-test                           # clean up test install
+bash tests/run-tests.sh                                  # существующие shell-тесты
+bash install.sh                                          # второй запуск — no-op (идемпотентность)
+bash install.sh /tmp/dt-test                             # project-level тест
+bash uninstall.sh /tmp/dt-test                           # чистое удаление теста
 ```
 
-## Pull Request Process
+## Процесс Pull Request
 
-1. Create a feature branch: `git checkout -b feature/<name>`
-2. Make your changes
-3. Test install/uninstall cycle:
+1. Создайте feature-ветку: `git checkout -b feature/<name>`
+2. Внесите изменения
+3. Протестируйте цикл install/uninstall:
    - `bash install.sh /tmp/dt-test` (project-level)
-   - `bash install.sh /tmp/dt-test` (idempotency — should skip)
-   - `bash uninstall.sh /tmp/dt-test` (clean removal)
+   - `bash install.sh /tmp/dt-test` (idempotency — должен пропустить)
+   - `bash uninstall.sh /tmp/dt-test` (чистое удаление)
    - `rm -rf /tmp/dt-test`
-4. Commit with descriptive messages
-5. Open a PR
+4. Коммитьте с описательными сообщениями
+5. Откройте PR
 
-## Reference
+## Справочник
 
-- **Architecture**: [`arch.md`](arch.md) — detailed system
-  architecture (layers, request lifecycle, Task Loop, Bug Council,
-  anti-abandonment, data model, state machines, design trade-offs).
-- Full agent index: `agents/` (18 subagents)
-- Full command index: `commands/devteam/` (17 slash commands)
-- Detailed docs: `docs/`
-
-## License
-
-By contributing, you agree that your contributions will be licensed
-under the MIT License (see `LICENSE`).
+- **Архитектура**: [`arch.md`](arch.md) — детальная системная
+  архитектура (слои, жизненный цикл запроса, Task Loop, Bug Council,
+  anti-abandonment, модель данных, state machines, дизайнерские
+  компромиссы).
+- Полный индекс агентов: `agents/` (18 сабагентов)
+- Полный индекс команд: `commands/devteam/` (17 slash-команд)
+- Детальная документация: `docs/`

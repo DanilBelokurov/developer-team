@@ -9,12 +9,10 @@ project:
   type: auto  # auto, kotlin-spring, library, fullstack
 
 # ============================================================================
-# KOTLIN + SPRING SKILL SOURCE (v6.0)
+# KOTLIN + SPRING SKILLS (v6.0)
 # ============================================================================
 kotlin_skills:
-  source: vendors/kotlin-backend-agent-skills
-  sync_command: bash scripts/sync-kotlin-skills.sh
-  auto_sync_on_install: true
+  source: skills/kotlin
 
 # ============================================================================
 # PIPELINE (v6.0)
