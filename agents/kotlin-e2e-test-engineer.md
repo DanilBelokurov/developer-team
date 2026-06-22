@@ -16,6 +16,8 @@ Write end-to-end tests that exercise the full application. You own:
 - `src/test/kotlin/**/*E2ETest.kt`
 - Contract tests (`/contract-tests/` or `src/contractTest/`)
 - Smoke tests
+- `src/testFixtures/kotlin/**/` — shared WireMock stubs, JWT builders,
+  TestRestTemplate helpers, contract schema definitions
 
 ## Skills to consult
 
@@ -35,6 +37,12 @@ Write end-to-end tests that exercise the full application. You own:
 - **Testcontainers** for full environment (app + DB + downstream)
 
 ## Process
+
+0. **Check testFixtures first.** Scan `src/testFixtures/kotlin/` for reusable
+   WireMock stub configurations, JWT token builders, TestRestTemplate
+   helpers, and shared contract schemas. If something is reused across
+   ≥2 E2E test classes, it belongs in `testFixtures` — create it there,
+   not inline.
 
 1. Identify the critical user journeys for the feature
 2. For each journey, write a test:
@@ -65,6 +73,8 @@ Write end-to-end tests that exercise the full application. You own:
 
 ## Style
 
+- WireMock stubs, JWT helpers, and TestRestTemplate setup must live in
+  `src/testFixtures/kotlin/` — not duplicated per test class.
 - E2E tests are slow and brittle — minimize count, maximize value
 - One test per critical journey (3-10 E2E per service)
 - Use WireMock liberally for downstream services

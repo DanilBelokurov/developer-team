@@ -40,6 +40,7 @@ Before writing code, classify what needs to be proven:
 - Use readable backtick test names when that matches the project style.
 - Use `runTest` and the coroutine test toolkit for coroutine-heavy code.
 - Build reusable fixtures, builders, or object mothers instead of duplicating inline object construction.
+- **testFixtures first:** Any builder, fixture, mock config, or helper reused in ≥2 test classes must live in `src/testFixtures/kotlin/`. Never copy-paste the same setup block into multiple test files.
 
 ## What To Cover
 
@@ -55,6 +56,8 @@ Before writing code, classify what needs to be proven:
 - Do not write tests that only verify mock interactions and prove nothing observable.
 - Do not couple assertions to private implementation details when public behavior is enough.
 - Do not use real time, random values, or shared mutable state without control.
+- Do not duplicate builders, fixtures, or mock setups across test classes —
+  extract them to `src/testFixtures/kotlin/`.
 
 ## Output Contract
 
@@ -62,7 +65,7 @@ Return these sections:
 
 - `Test plan`: which layers to use and why.
 - `Generated tests`: the concrete test classes or patch plan.
-- `Test data support`: builders, fixtures, or factories to add.
+- `Test data support`: list every builder/fixture that belongs in `src/testFixtures/kotlin/` (not inline in test classes).
 - `Coverage gaps`: important cases still not covered.
 - `Verification`: commands to run and which tests should fail before the fix.
 
@@ -97,6 +100,8 @@ Return these sections:
 - Keep setup explicit and local to the scenario.
 - Prefer one clear reason for failure per test.
 - Do not silently introduce slow infrastructure-heavy tests into fast unit test suites.
+- If a utility is used in ≥2 test files, it must be in `src/testFixtures/kotlin/` —
+  flag it explicitly in the test plan.
 
 ## Quality Bar
 

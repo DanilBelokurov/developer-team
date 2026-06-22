@@ -24,20 +24,20 @@ Stage 2 to identify test targets.
 
 | Agent | Owns | Skills reference |
 |---|---|---|
-| `kotlin-unit-test-engineer` | `src/test/kotlin/**/*Test.kt` for unit scope, `**/entities/**`, pure functions | `test-suite-builder` |
-| `kotlin-integration-test-engineer` | `src/test/kotlin/**/*IT.kt` for Spring Boot integration, `@SpringBootTest` | `integration-resilience-engineer`, `test-suite-builder` |
-| `kotlin-e2e-test-engineer` | `src/test/kotlin/**/*E2ETest.kt`, contract tests, smoke tests | `integration-resilience-engineer`, `stacktrace-log-triage` |
+| `kotlin-unit-test-engineer` | `src/test/kotlin/**/*Test.kt` for unit scope, `**/entities/**`, pure functions, `src/testFixtures/kotlin/` | `test-suite-builder` |
+| `kotlin-integration-test-engineer` | `src/test/kotlin/**/*IT.kt` for Spring Boot integration, `@SpringBootTest`, `src/testFixtures/kotlin/` (shared containers) | `integration-resilience-engineer`, `test-suite-builder` |
+| `kotlin-e2e-test-engineer` | `src/test/kotlin/**/*E2ETest.kt`, contract tests, smoke tests, `src/testFixtures/kotlin/` (WireMock stubs, JWT helpers) | `integration-resilience-engineer`, `stacktrace-log-triage` |
 
 ## Dispatch pattern (parallel)
 
 ```python
 # All 3 in one assistant turn:
 agent(subagent_type="kotlin-unit-test-engineer",
-     prompt=f"Feature: {feature}\nCode changes: {diff}\nTest framework: JUnit 5 + Kotest + MockK")
+     prompt=f"Feature: {feature}\nCode changes: {diff}\nTest framework: JUnit 5 + Kotest + MockK\nMANDATORY: Check src/testFixtures/kotlin/ before writing inline builders or mock setup.")
 agent(subagent_type="kotlin-integration-test-engineer",
-     prompt=f"Feature: {feature}\nCode changes: {diff}\nUse Testcontainers, @SpringBootTest")
+     prompt=f"Feature: {feature}\nCode changes: {diff}\nUse Testcontainers, @SpringBootTest\nMANDATORY: Reuse shared containers from src/testFixtures/kotlin/Containers.kt — do not redeclare.")
 agent(subagent_type="kotlin-e2e-test-engineer",
-     prompt=f"Feature: {feature}\nCode changes: {diff}\nUse WireMock, REST Assured")
+     prompt=f"Feature: {feature}\nCode changes: {diff}\nUse WireMock, REST Assured\nMANDATORY: Move WireMock stubs and JWT helpers to src/testFixtures/kotlin/ when reused across classes.")
 ```
 
 ## Quality gate

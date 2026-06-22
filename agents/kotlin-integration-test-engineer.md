@@ -17,6 +17,8 @@ infrastructure via Testcontainers. You own:
 - `src/test/kotlin/**/*IT.kt` (integration test convention)
 - `@SpringBootTest` annotated classes
 - Testcontainers-based tests
+- `src/testFixtures/kotlin/**/` — shared Testcontainer definitions,
+  `@DynamicPropertySource` helpers, common test-data factories
 
 ## Skills to consult
 
@@ -38,6 +40,13 @@ infrastructure via Testcontainers. You own:
 - **WireMock** for external API mocking
 
 ## Process
+
+0. **Check testFixtures first.** Look in `src/testFixtures/kotlin/` for shared
+   containers (e.g., `Containers.postgres`, `Containers.kafka`,
+   `Containers.redis`) and `@DynamicPropertySource` helpers. If the needed
+   container or helper is already there, use it — do not redeclare.
+   If it does not exist, create it in `src/testFixtures/kotlin/` when it will
+   be reused across ≥2 integration test classes.
 
 1. Detect which infrastructure the feature needs (DB? Kafka? Redis?
    External API?)
@@ -73,6 +82,9 @@ infrastructure via Testcontainers. You own:
 
 ## Style
 
+- Declare shared Testcontainers in `src/testFixtures/kotlin/Containers.kt`
+  as static `@JvmStatic` fields — one definition, reused everywhere.
+  Do NOT redeclare the same `@Container` in multiple test classes.
 - One container per external dependency
 - Use `@DynamicPropertySource` to wire container URLs into Spring
 - Clean state between tests (`@DirtiesContext` only when necessary;

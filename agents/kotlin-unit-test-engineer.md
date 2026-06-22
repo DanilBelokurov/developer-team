@@ -16,6 +16,7 @@ Write unit tests for Kotlin + Spring code. You own:
 - `src/test/kotlin/**/*Test.kt` (unit scope, NOT integration)
 - `**/entities/**` entity tests
 - Pure function tests
+- `src/testFixtures/kotlin/**/` — shared test utilities, builders, mock configs
 
 ## Skills to consult
 
@@ -32,6 +33,11 @@ Write unit tests for Kotlin + Spring code. You own:
 - **AssertJ** if the project already uses it (else default to Kotest)
 
 ## Process
+
+0. **Check testFixtures first.** Before writing inline builders or mock setup,
+   scan `src/testFixtures/kotlin/` for reusable utilities. If a fixture does
+   not exist but the same builder/mock config would be used in ≥2 test
+   classes, create it in `src/testFixtures/kotlin/` instead of inlining it.
 
 1. Read code changes from Stage 2 (git diff or list of files)
 2. For each public function/class, identify:
@@ -69,6 +75,8 @@ Write unit tests for Kotlin + Spring code. You own:
 
 ## Style
 
+- Extract builders, object mothers, and shared mock configurations into
+  `src/testFixtures/kotlin/` — never duplicate them across test classes.
 - One test class per production class
 - Given-when-then structure (or arrange-act-assert)
 - One assertion focus per test (multiple `verify`/`assert` calls OK
