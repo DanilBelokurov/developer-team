@@ -3,28 +3,15 @@
   "version": "6.3.0",
   "description": "Kotlin + Spring backend 3-stage development pipeline (Analytics → Development → Testing) with parallel sub-stages. Integrates 25 skills from yalishevant/kotlin-backend-agent-skills via git submodule.",
   "mcpServers": {
-    "github": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-github"],
-      "env": {
-        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
-      }
-    },
-    "memory": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-memory"]
-    },
-    "semgrep": {
-      "type": "stdio",
-      "command": "semgrep",
-      "args": ["mcp"]
-    },
     "graphfocus": {
       "type": "stdio",
       "command": "graphfocus",
       "args": ["mcp"]
+    },
+    "atlassian": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-atlassian"]
     }
   },
   "contextFileName": "QWEN.md",
