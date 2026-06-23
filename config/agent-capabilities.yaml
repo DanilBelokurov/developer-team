@@ -585,24 +585,6 @@ categories:
           keywords: [e2e, end to end, playwright, cypress, browser test, puppeteer]
           task_types: [e2e_testing, hybrid_testing]
 
-      - id: visual_verification
-        capabilities:
-          - visual_inspection
-          - layout_verification
-          - responsive_testing
-          - accessibility_visual
-          - interaction_verification
-          - claude_computer_use
-        complexity_range: [5, 12]
-        default_model: opus  # Required for Computer Use
-        tools: [claude_computer_use, browser]
-        triggers:
-          keywords: [visual verification, visual testing, ui verification, layout check]
-          task_types: [visual_testing, hybrid_testing]
-        notes: |
-          Uses Claude Computer Use for human-like visual inspection.
-          Runs after Playwright E2E tests pass.
-          Catches rendering issues that automated tests miss.
 
       - id: accessibility_specialist
         capabilities:
@@ -1062,11 +1044,6 @@ selection_rules:
         agent: e2e_tester
         tool: puppeteer_mcp
         required: conditional  # Only when complex interactions needed
-      stage_3:
-        agent: visual_verification
-        tool: claude_computer_use
-        model: opus
-        required: true
     config_file: ".devteam/hybrid-testing-config.yaml"
 
   # Design system generation

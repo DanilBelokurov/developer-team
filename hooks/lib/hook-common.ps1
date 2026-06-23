@@ -286,10 +286,10 @@ function Save-Checkpoint {
 }
 
 # ============================================================================
-# CLAUDE CONTEXT
+# HOOK CONTEXT
 # ============================================================================
 
-function Get-ClaudeContext {
+function Get-HookContext {
     $sessionId = Get-CurrentSession
     $taskId = Get-CurrentTask
     $iteration = Get-CurrentIteration
@@ -299,6 +299,7 @@ function Get-ClaudeContext {
     $safeTask = ($taskId ?? "") -replace '"', '\"'
     return "{`"session`":`"$safeSession`",`"task`":`"$safeTask`",`"iteration`":$iteration,`"failures`":$failures,`"model`":`"$model`",`"hook`":`"$($script:CURRENT_HOOK)`"}"
 }
+
 
 # ============================================================================
 # ESCALATION
@@ -322,7 +323,7 @@ function ConvertTo-SafeJsonString {
 }
 
 # ============================================================================
-# SYSTEM MESSAGE (Claude Code hook context injection)
+# SYSTEM MESSAGE (Qwen Code hook context injection)
 # ============================================================================
 
 function Get-SystemMessage {

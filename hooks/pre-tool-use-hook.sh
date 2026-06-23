@@ -7,8 +7,8 @@
 #   2 = Block tool call with message
 #
 # Environment variables expected:
-#   CLAUDE_TOOL_NAME - Name of the tool being called
-#   CLAUDE_TOOL_INPUT - JSON input for the tool
+#   QWEN_TOOL_NAME - Name of the tool being called
+#   QWEN_TOOL_INPUT - JSON input for the tool
 
 set -euo pipefail
 
@@ -30,11 +30,11 @@ init_hook "pre-tool-use"
 # CONFIGURATION
 # ============================================================================
 
-TOOL_NAME="${CLAUDE_TOOL_NAME:-}"
-TOOL_INPUT="${CLAUDE_TOOL_INPUT:-}"
+TOOL_NAME="${QWEN_TOOL_NAME:-}"
+TOOL_INPUT="${QWEN_TOOL_INPUT:-}"
 
 if [[ -z "$TOOL_NAME" ]] && [[ -z "$TOOL_INPUT" ]]; then
-    log_warn "pre-tool-use" "No CLAUDE_TOOL_NAME or CLAUDE_TOOL_INPUT set"
+    log_warn "pre-tool-use" "No QWEN_TOOL_NAME or QWEN_TOOL_INPUT set"
     exit 0  # Nothing to validate (H7)
 fi
 
@@ -358,7 +358,7 @@ main() {
     inject_iteration_context
 
     # Notify MCP server (non-blocking)
-    mcp_notify "pre_tool_use" "$(get_claude_context)"
+    mcp_notify "pre_tool_use" "$(get_hook_context)"
 
     # All checks passed
     exit 0

@@ -275,7 +275,7 @@ Escalate to a more capable model when:
 ### Manual Testing
 
 ```bash
-# In Claude Code with DevTeam installed
+# In Qwen Code with DevTeam installed
 /devteam:status
 
 # Then make a request matching your agent's triggers

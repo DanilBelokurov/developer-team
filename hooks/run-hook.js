@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Cross-platform hook runner for DevTeam
 // Detects OS and runs the appropriate .sh (Unix) or .ps1 (Windows) hook script.
-// Always exits 0 on error — hooks must never block Claude Code.
+// Always exits 0 on error — hooks must never block Qwen Code.
 
 'use strict';
 
@@ -33,6 +33,6 @@ try {
     }
   }
 } catch (e) {
-  // Hooks degrade gracefully — never block Claude Code
+  // Hooks degrade gracefully — never block Qwen Code
   process.exit(0);
 }

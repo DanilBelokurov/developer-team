@@ -40,6 +40,69 @@ if ! declare -f log_error &>/dev/null 2>/dev/null; then
 fi
 
 # ============================================================================
+# HOOK LOGGING (observability for hook invocations)
+# ============================================================================
+
+# HOOK_VERBOSE - set to "true" to enable detailed hook logging
+HOOK_VERBOSE="${HOOK_VERBOSE:-false}"
+
+# log_hook_invocation - Logs hook invocation with parameters to file
+# Usage: log_hook_invocation "hook_name" "tool_name" "input_summary" "duration_ms"
+log_hook_invocation() {
+    local hook_name="${1:-unknown}"
+    local tool_name="${2:-}"
+    local input_summary="${3:-}"
+    local duration_ms="${4:-0}"
+    local exit_code="${5:-0}"
+
+    local log_file="${DEVTEAM_DIR}/logs/hooks-$(date +%Y-%m-%d).jsonl"
+    mkdir -p "$(dirname "$log_file")"
+
+    # Get current context
+    local context
+    context=$(get_hook_context 2>/dev/null || echo '{}')
+
+    # Build JSON log entry
+    local log_entry
+    log_entry=$(printf '%s' "$context" | python3 -c "
+import json, sys, datetime
+try:
+    ctx = json.load(sys.stdin)
+    entry = {
+        'ts': datetime.datetime.utcnow().isoformat() + 'Z',
+        'hook': '$hook_name',
+        'tool': '$tool_name',
+        'input_summary': '$input_summary',
+        'duration_ms': $duration_ms,
+        'exit_code': $exit_code,
+        'session': ctx.get('session', ''),
+        'task': ctx.get('task', ''),
+        'iteration': ctx.get('iteration', 0),
+        'failures': ctx.get('failures', 0)
+    }
+    print(json.dumps(entry))
+except:
+    print(json.dumps({'ts': datetime.datetime.utcnow().isoformat() + 'Z', 'hook': '$hook_name'}))
+" 2>/dev/null || echo "{}")
+
+    echo "$log_entry" >> "$log_file"
+
+    # Also log to stderr if verbose mode is enabled
+    if [[ "${HOOK_VERBOSE}" == "true" ]]; then
+        log_debug "$hook_name" "Invoked: tool=$tool_name, exit=$exit_code, duration=${duration_ms}ms"
+    fi
+}
+
+# log_hook_event - Logs a specific hook event with data
+# Usage: log_hook_event "event_type" "data_json"
+log_hook_event() {
+    local event_type="${1:-hook_event}"
+    local data="${2:-{}}"
+
+    log_event_to_db "hook_$event_type" "hook" "Hook event: $event_type" "$data"
+}
+
+# ============================================================================
 # HOOK INITIALIZATION
 # ============================================================================
 
@@ -101,7 +164,7 @@ inject_system_message() {
     local escaped_msg
     escaped_msg=$(printf '%s' "$message" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/\\t/g' | awk '{printf "%s\\n", $0}' | sed 's/\\n$//')
 
-    # Output JSON context injection to stdout (Claude Code hook protocol)
+    # Output JSON context injection to stdout (Qwen Code hook protocol)
     cat <<EOF
 {"id":"devteam-${id}","type":"system","message":"${escaped_msg}"}
 EOF
@@ -196,10 +259,11 @@ mcp_notify() {
 }
 
 # ============================================================================
-# CLAUDE CONTEXT
+# HOOK CONTEXT
 # ============================================================================
 
-get_claude_context() {
+# get_hook_context - Returns JSON with current hook/session context for logging
+get_hook_context() {
     local session_id=""
     local task_id=""
     local iteration="0"
@@ -231,6 +295,7 @@ get_claude_context() {
 {"session":"${safe_session:-}","task":"${safe_task:-}","iteration":${iteration:-0},"failures":${failures:-0},"model":"${model:-sonnet}","hook":"${CURRENT_HOOK:-unknown}"}
 EOF
 }
+
 
 # ============================================================================
 # ESCALATION

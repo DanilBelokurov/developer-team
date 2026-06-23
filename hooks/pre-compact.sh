@@ -114,10 +114,10 @@ FOOTER
 }
 
 # ============================================
-# OUTPUT CONTEXT FOR CLAUDE
+# OUTPUT CONTEXT FOR QWEN
 # ============================================
 output_context() {
-    # This output will be preserved in Claude's context after compaction
+    # This output will be preserved in context after compaction
     echo ""
     echo "## Post-Compaction Context"
     echo ""
@@ -136,7 +136,7 @@ main() {
     # Save critical context
     save_critical_context
 
-    # Output for Claude
+    # Output for Qwen
     output_context
 
     log "Pre-compact preparation complete"

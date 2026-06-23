@@ -251,7 +251,7 @@ hooks:
   post_tool_use:
     script: "hooks/persistence-hook.sh"
     env_vars:
-      - CLAUDE_OUTPUT  # Last Claude message
+      - LAST_MESSAGE   # Last LLM message
       - CURRENT_TASK   # Current task ID
     exit_codes:
       0: allow         # Output acceptable

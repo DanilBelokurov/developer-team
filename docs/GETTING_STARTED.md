@@ -1,30 +1,31 @@
 # Getting Started with DevTeam
 
-Welcome to DevTeam, a 127-agent automated development system for Claude Code. This guide will help you get started quickly.
+Welcome to DevTeam, a multi-agent automated development system for Qwen Code. This guide will help you get started quickly.
 
 ## Quick Start (5 minutes)
 
-### 1. Install from Claude Code Marketplace
+### 1. Install
 
-The easiest way to install DevTeam is directly from within Claude Code:
+The easiest way to install DevTeam is directly from within Qwen Code:
 
 ```bash
-# Add the DevTeam marketplace
-qwen extensions install https://github.com/michael-harris/devteam
+# Install DevTeam extension
+qwen extensions install /path/to/devteam
 
-# Install the plugin
-qwen extensions install devteam@devteam-marketplace
+# Run setup script (installs hooks, initializes state)
+bash install.sh
 ```
 
-All hooks, agents, skills, and rules are configured automatically. The SQLite database (`.devteam/devteam.db`) is auto-initialized on first use — no manual setup required.
+All hooks, agents, skills, and rules are configured automatically. State files (`.devteam/state/`) are auto-initialized on first use — no manual setup required.
 
-#### Alternative: Install from Local Clone
+#### For Development
 
 For development or contributing:
 
 ```bash
 git clone https://github.com/michael-harris/devteam.git
-qwen extensions install /path/to/devteam
+cd devteam
+bash install.sh "$(pwd)"  # install into itself for live development
 ```
 
 ### 2. Verify Installation
@@ -131,7 +132,7 @@ DevTeam uses an iterative quality loop:
 │  FAIL? → Create fix tasks, retry            │
 │        ↓                                    │
 │  Still failing? → Escalate model            │
-│        (haiku → sonnet → opus)              │
+│        (low → medium → high)                 │
 │        ↓                                    │
 │  Max iterations? → Invoke Bug Council       │
 └─────────────────────────────────────────────┘
@@ -139,7 +140,7 @@ DevTeam uses an iterative quality loop:
 
 ## Specialized Agents
 
-DevTeam has 127 specialized agents across categories:
+DevTeam has specialized agents across categories:
 
 - **Planning**: PRD generation, task breakdown, sprint planning
 - **Orchestration**: Task coordination, quality loops, scope validation
@@ -158,8 +159,10 @@ After initialization, DevTeam creates:
 ```
 your-project/
 ├── .devteam/
-│   ├── devteam.db        # SQLite database (state, events, metrics)
-│   └── task-loop-config.yaml # Configuration
+│   └── state/           # File-based state (sessions, kv, events)
+│       ├── sessions/
+│       ├── kv/
+│       └── events/
 ├── docs/
 │   ├── planning/
 │   │   ├── PROJECT_PRD.json

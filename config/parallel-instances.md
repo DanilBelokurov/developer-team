@@ -2,7 +2,7 @@
 
 This document covers:
 1. What happens when `/devteam:implement` runs with multiple plans
-2. Running multiple Claude Code instances simultaneously
+2. Running multiple instances simultaneously
 3. Git repository requirements
 4. Git worktree integration for parallel plan development
 
@@ -51,7 +51,7 @@ Always works:
 /devteam:implement --plan 3
 ```
 
-## Question 2: Two Claude Code Instances, Two Plans
+## Question 2: Two Instances, Two Plans
 
 ### The Problem
 
@@ -78,7 +78,7 @@ When a plan starts execution, it acquires a lock:
 **Lock file format:**
 ```json
 {
-  "locked_by": "claude-instance-abc123",
+  "locked_by": "qwen-instance-abc123",
   "locked_at": "2025-01-29T10:00:00Z",
   "pid": 12345,
   "hostname": "users-laptop",
@@ -116,7 +116,7 @@ Step 3: On exit (normal or crash), release lock
 
 Currently being executed by another instance:
   Started: 10 minutes ago
-  Instance: claude-instance-abc123
+  Instance: qwen-instance-abc123
 
 Options:
   1. Wait for lock release (recommended)

@@ -415,7 +415,6 @@ After migration or fresh start:
   `get_kv_state`, `set_state`, `get_state`, `start_session`, etc.)
 - Hooks and orchestrator code that source `state.sh` continue to
   work without modification.
-- v6.1 schema files archived at `legacy/claude-code/sqlite-schema/`.
 
 ---
 

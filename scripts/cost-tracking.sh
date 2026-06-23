@@ -14,22 +14,14 @@ COST_LOG="${DEVTEAM_DIR}/cost-log.json"
 # Register temp file cleanup
 setup_temp_cleanup
 
-# Pricing (updated for Claude 4.5/4.6 models -- February 2026)
+# Pricing for Qwen Code models
+# Add your model pricing here
 declare -A MODEL_PRICING
-# Current Claude models
-MODEL_PRICING["claude-opus-4-6"]="15.00:75.00"             # Opus 4.6 (input:output per 1M tokens)
-MODEL_PRICING["claude-sonnet-4-5-20250929"]="3.00:15.00"    # Sonnet 4.5
-MODEL_PRICING["claude-haiku-4-5-20251001"]="0.80:4.00"      # Haiku 4.5
-# Aliases for short model names used by plugin.json
-MODEL_PRICING["opus"]="15.00:75.00"
-MODEL_PRICING["sonnet"]="3.00:15.00"
-MODEL_PRICING["haiku"]="0.80:4.00"
-# Legacy Claude models (for historical data)
-MODEL_PRICING["claude-opus-4-5-20251101"]="15.00:75.00"
-MODEL_PRICING["claude-sonnet-4-20250514"]="3.00:15.00"
-MODEL_PRICING["claude-haiku-4-20250414"]="0.80:4.00"
-MODEL_PRICING["claude-3-5-sonnet-20241022"]="3.00:15.00"
-MODEL_PRICING["claude-3-5-haiku-20241022"]="0.80:4.00"
+# Example:
+# MODEL_PRICING["gpt-4o"]="2.50:10.00"
+# MODEL_PRICING["qwen-2.5"]="0.50:2.00"
+# MODEL_PRICING["sonnet"]="3.00:15.00"
+# MODEL_PRICING["haiku"]="0.80:4.00"
 
 # Check for bc dependency -- required for cost calculations
 _BC_AVAILABLE=true
@@ -86,7 +78,7 @@ calculate_cost() {
 record_usage() {
     local session_id="${1:-$(date +%Y%m%d)}"
     local task_id="${2:-none}"
-    local model="${3:-claude-3-5-sonnet}"
+    local model="${3:-unknown}"
     local input_tokens="${4:-0}"
     local output_tokens="${5:-0}"
     local operation="${6:-unknown}"

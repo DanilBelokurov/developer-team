@@ -16,7 +16,7 @@ function Write-Log {
     Write-Host "[DevTeam Session Start] $Message"
 }
 
-# Output to stdout (will be injected into Claude's context)
+# Output to stdout (will be injected into context)
 function Write-Output-Text {
     param([string]$Text)
     Write-Output $Text

@@ -36,9 +36,9 @@ Activate Bug Council when:
 | Systems Thinker | Architectural | Component interactions, data flow, dependencies |
 | Adversarial Tester | Edge cases | Other failure modes, security implications |
 
-## Agent Teams Mode (Preferred)
+## Parallel Subagent Mode (Preferred)
 
-When Agent Teams is enabled (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`), the Bug Council runs as a **true parallel team** with inter-agent communication:
+The Bug Council runs as **parallel subagents** with inter-agent communication via the `send_message` tool:
 
 ### Team Configuration
 

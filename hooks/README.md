@@ -8,13 +8,14 @@ and quality enforcement.
 These hooks integrate with Qwen Code's hook system to provide:
 
 - Autonomous execution until `EXIT_SIGNAL: true`
-- Session memory persistence (SQLite via `scripts/state.sh`)
+- Session memory persistence (file-based via `scripts/state.sh`)
 - State preservation across context compaction
 - Anti-abandonment enforcement (`persistence-hook.sh` on `idle_prompt`)
 - Scope validation and enforcement
 - Dangerous command blocking
 - Quality gate detection (post-tool-use)
 - Stop-hook enforcement (blocks session exit without completion signal)
+- **Hook observability logging** (JSON Lines format)
 
 ## Quick Start
 
@@ -71,12 +72,47 @@ Qwen Code was launched.
 - `2` — **blocking error**, stderr shown to model
 - other — non-blocking, execution continues
 
-### Input contract
+### Environment Variables Contract
 
 Qwen Code passes hook input as JSON via stdin. The shim at
-`hooks/run-hook.sh` parses stdin and exports legacy env vars
-(`CLAUDE_TOOL_NAME`, `CLAUDE_TOOL_INPUT`, etc.) so the existing
-9 hook scripts continue to work.
+`hooks/run-hook.sh` parses stdin and exports QWEN_* environment variables:
+
+| Variable | Description | Events |
+|----------|-------------|--------|
+| `QWEN_SESSION_ID` | Session identifier | All |
+| `QWEN_CWD` | Current working directory | All |
+| `QWEN_TIMESTAMP` | Hook timestamp | All |
+| `QWEN_TOOL_NAME` | Tool name (WriteFile, Bash, etc.) | PreToolUse, PostToolUse |
+| `QWEN_TOOL_INPUT` | Tool input JSON | PreToolUse, PostToolUse |
+| `QWEN_TOOL_USE_ID` | Unique tool use identifier | PreToolUse, PostToolUse |
+| `QWEN_TOOL_RESPONSE` | Tool response | PostToolUse |
+| `QWEN_LAST_MESSAGE` | Last assistant message | Stop, SubagentStop |
+| `QWEN_STOP_MESSAGE` | Alias for last message | Stop |
+| `QWEN_PERMISSION_MODE` | Permission mode | Tool events |
+| `QWEN_SESSION_SOURCE` | Session source (startup, resume, etc.) | SessionStart, SessionEnd |
+| `QWEN_NOTIFICATION_TYPE` | Notification type | Notification |
+
+## Hook Observability
+
+Hooks log invocations to `.devteam/logs/hooks-YYYY-MM-DD.jsonl`:
+
+```json
+{"ts":"2026-06-23T10:30:00Z","hook":"pre-tool-use","tool":"Bash","input_summary":"ls -la","duration_ms":150,"exit_code":0,"session":"abc123","task":"task-1","iteration":5,"failures":0}
+```
+
+**Enable verbose logging**: Set `HOOK_VERBOSE=true` in environment or `.devteam/config.yaml`.
+
+**Query logs**:
+```bash
+# Recent hook invocations
+cat .devteam/logs/hooks-$(date +%Y-%m-%d).jsonl | jq
+
+# Filter by tool
+cat .devteam/logs/hooks-*.jsonl | jq 'select(.tool == "Bash")'
+
+# Error rate
+cat .devteam/logs/hooks-*.jsonl | jq -s 'map(select(.exit_code != 0)) | length'
+```
 
 ## Hook Scripts
 
@@ -85,13 +121,13 @@ Qwen Code passes hook input as JSON via stdin. The shim at
 | `pre-tool-use-hook.sh` | Validates scope, blocks dangerous commands, warns on circuit breaker |
 | `post-tool-use-hook.sh` | Detects quality gate results from bash output, tracks file changes |
 | `stop-hook.sh` | Allows exit only when `EXIT_SIGNAL: true` is in the last message |
-| `pre-compact.sh` | Saves state to `.devteam/devteam.db` before conversation compaction |
-| `session-start.sh` | Initializes or resumes session in SQLite |
+| `pre-compact.sh` | Saves state before conversation compaction |
+| `session-start.sh` | Initializes or resumes session |
 | `session-end.sh` | Finalizes session, calculates costs |
-| `persistence-hook.sh` | Detects abandonment language on `idle_prompt`, re-engages |
-| `scope-check.sh` | Helper for `pre-tool-use-hook.sh` (validates file paths against task scope) |
-| `run-hook.sh` | Shim: maps Qwen Code stdin JSON → legacy env vars |
-| `graphfocus-hook.sh` | Auto-updates graphfocus index if stale (>24h) before graphfocus tool calls |
+| `persistence-hook.sh` | Detects abandonment language, re-engages |
+| `scope-check.sh` | Validates file paths against task scope |
+| `run-hook.sh` | Shim: maps Qwen Code stdin JSON → QWEN_* env vars |
+| `graphfocus-hook.sh` | Auto-updates graphfocus index if stale (>24h) |
 
 ## Configuration
 
@@ -108,3 +144,4 @@ The merged config is idempotent: re-running `bash ../install.sh` is a no-op.
   includes `EXIT_SIGNAL: true`
 - Persistence hook false-positive? Adjust forbidden phrases in
   `.devteam/config.yaml` under `anti_abandonment.forbidden_phrases`
+- Hook logging not appearing? Check `.devteam/logs/` directory exists and permissions

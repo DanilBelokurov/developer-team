@@ -7,8 +7,8 @@
 #   (Post hooks typically don't block, just observe and inject guidance)
 #
 # Environment variables expected:
-#   CLAUDE_TOOL_NAME - Name of the tool that was called
-#   CLAUDE_TOOL_RESULT - Result/output from the tool
+#   QWEN_TOOL_NAME - Name of the tool that was called
+#   QWEN_TOOL_RESPONSE - Response/output from the tool
 
 set -euo pipefail
 
@@ -30,8 +30,8 @@ init_hook "post-tool-use"
 # CONFIGURATION
 # ============================================================================
 
-TOOL_NAME="${CLAUDE_TOOL_NAME:-}"
-TOOL_RESULT="${CLAUDE_TOOL_RESULT:-}"
+TOOL_NAME="${QWEN_TOOL_NAME:-}"
+TOOL_RESULT="${QWEN_TOOL_RESPONSE:-}"
 
 # ============================================================================
 # OUTCOME DETECTION PATTERNS
@@ -382,7 +382,7 @@ main() {
     detect_quality_gate "$TOOL_NAME" "$TOOL_RESULT"
 
     # Notify MCP server
-    mcp_notify "post_tool_use" "$(get_claude_context)"
+    mcp_notify "post_tool_use" "$(get_hook_context)"
 
     exit 0
 }

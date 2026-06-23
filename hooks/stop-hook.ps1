@@ -16,7 +16,7 @@ Initialize-Hook "stop"
 # CONFIGURATION
 # ============================================================================
 
-$MESSAGE = if ($env:STOP_HOOK_MESSAGE) { $env:STOP_HOOK_MESSAGE } else { $env:CLAUDE_OUTPUT }
+$MESSAGE = if ($env:QWEN_STOP_MESSAGE) { $env:QWEN_STOP_MESSAGE } else { $env:QWEN_LAST_MESSAGE }
 
 # ============================================================================
 # VALID EXIT SIGNALS
@@ -207,5 +207,5 @@ if ($sessionId) {
     Invoke-DbQuery "UPDATE sessions SET current_iteration = $($iteration + 1) WHERE id = '$safeId';"
 }
 
-Send-McpNotification "exit_blocked" (Get-ClaudeContext)
+Send-McpNotification "exit_blocked" (Get-HookContext)
 exit 2

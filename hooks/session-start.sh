@@ -24,7 +24,7 @@ log() {
     echo "[DevTeam Session Start] $1"
 }
 
-# Output to stdout (will be injected into Claude's context)
+# Output to stdout (will be injected into context)
 output() {
     echo "$1"
 }

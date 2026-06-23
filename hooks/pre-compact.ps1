@@ -127,10 +127,10 @@ If resuming after compaction:
 }
 
 # ============================================
-# OUTPUT CONTEXT FOR CLAUDE
+# OUTPUT CONTEXT FOR QWEN
 # ============================================
 function Output-Context {
-    # This output will be preserved in Claude's context after compaction
+    # This output will be preserved in context after compaction
     Write-Output ""
     Write-Output "## Post-Compaction Context"
     Write-Output ""
@@ -149,7 +149,7 @@ function Main {
     # Save critical context
     Save-CriticalContext
 
-    # Output for Claude
+    # Output for Qwen
     Output-Context
 
     Write-Log "Pre-compact preparation complete"

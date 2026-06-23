@@ -2,7 +2,7 @@
 # DevTeam Persistence Hook
 # Detects and prevents premature task abandonment
 #
-# This hook runs on PostMessage and analyzes Claude's output for
+# This hook runs on Notification events and analyzes Qwen's output for
 # "give up" signals, blocking them and forcing continued effort.
 #
 # Exit codes:
@@ -10,7 +10,7 @@
 #   2 = Block and re-engage (detected abandonment attempt)
 #
 # Environment variables expected:
-#   CLAUDE_OUTPUT - Claude's text output to analyze
+#   QWEN_LAST_MESSAGE - Qwen's text output to analyze
 
 set -euo pipefail
 
@@ -32,7 +32,7 @@ init_hook "persistence"
 # CONFIGURATION
 # ============================================================================
 
-MESSAGE="${CLAUDE_OUTPUT:-}"
+MESSAGE="${QWEN_LAST_MESSAGE:-}"
 ABANDONMENT_LOG="${DEVTEAM_DIR}/abandonment-attempts.log"
 
 # If no message, allow

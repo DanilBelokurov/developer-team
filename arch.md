@@ -59,8 +59,7 @@ devteam/
 │   └── sync/                # Epiq sync daemon state
 │
 ├── docs/                    # Документация
-├── tests/                  # Тестовый набор
-└── legacy/claude-code/     # Архив v5.0
+└── tests/                  # Тестовый набор
 ```
 
 ### Файловая система состояния (v6.2)

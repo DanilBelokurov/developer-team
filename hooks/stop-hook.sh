@@ -1,14 +1,14 @@
 #!/bin/bash
 # DevTeam Stop Hook
 # Implements session persistence for autonomous mode
-# Prevents Claude from exiting without proper completion signal
+# Prevents Qwen from exiting without proper completion signal
 #
 # Exit codes:
 #   0 = Allow exit (work complete or not in autonomous mode)
 #   2 = Block exit and re-inject prompt (work not complete)
 #
 # Environment variables expected:
-#   STOP_HOOK_MESSAGE or CLAUDE_OUTPUT - Claude's last message
+#   QWEN_STOP_MESSAGE or QWEN_LAST_MESSAGE - Qwen's last message
 
 set -euo pipefail
 
@@ -30,7 +30,7 @@ init_hook "stop"
 # CONFIGURATION
 # ============================================================================
 
-MESSAGE="${STOP_HOOK_MESSAGE:-${CLAUDE_OUTPUT:-}}"
+MESSAGE="${QWEN_STOP_MESSAGE:-${QWEN_LAST_MESSAGE:-}}"
 
 # ============================================================================
 # VALID EXIT SIGNALS
@@ -282,7 +282,7 @@ Include EXIT_SIGNAL: true when properly complete.
     fi
 
     # Notify MCP
-    mcp_notify "exit_blocked" "$(get_claude_context)"
+    mcp_notify "exit_blocked" "$(get_hook_context)"
 
     exit 2
 }

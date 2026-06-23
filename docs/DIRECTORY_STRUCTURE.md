@@ -38,7 +38,7 @@ devteam/
 │   ├── ... (one directory per command, each with SKILL.md)
 │   └── worktree-cleanup/SKILL.md
 │
-├── .claude/
+├── .qwen/
 │   └── rules/                 # Path-specific rule files (11)
 │       └── *.md
 │

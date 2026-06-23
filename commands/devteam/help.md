@@ -72,4 +72,3 @@ List all DevTeam commands with usage.
 
 - `docs/GETTING_STARTED.md` — first-time setup
 - `docs/TROUBLESHOOTING.md` — common issues
-- `docs/MIGRATION_FROM_CLAUDE.md` — coming from Claude Code

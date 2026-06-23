@@ -16,8 +16,8 @@ Initialize-Hook "pre-tool-use"
 # CONFIGURATION
 # ============================================================================
 
-$ToolName = $env:CLAUDE_TOOL_NAME
-$ToolInput = $env:CLAUDE_TOOL_INPUT
+$ToolName = $env:QWEN_TOOL_NAME
+$ToolInput = $env:QWEN_TOOL_INPUT
 
 # ============================================================================
 # DANGEROUS COMMAND PATTERNS
@@ -238,6 +238,6 @@ Test-CircuitBreaker
 Write-IterationContext
 
 # Notify MCP server
-Send-McpNotification "pre_tool_use" (Get-ClaudeContext)
+Send-McpNotification "pre_tool_use" (Get-HookContext)
 
 exit 0

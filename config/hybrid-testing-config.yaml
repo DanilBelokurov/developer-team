@@ -1,11 +1,11 @@
 # Hybrid Testing Configuration
-# Combines Playwright E2E, Puppeteer MCP, and Claude Computer Use Visual Verification
+# Combines Playwright E2E, Puppeteer MCP, and Visual Verification
 #
 # This configuration enables a three-layer testing pipeline that catches issues
 # at different levels of abstraction:
 # 1. Playwright: Fast, scriptable, CI/CD-native DOM testing
 # 2. Puppeteer MCP: Complex browser interactions and edge cases
-# 3. Visual Verification: Human-like visual inspection via Claude Computer Use
+# 3. Visual Verification: Human-like visual inspection
 
 version: "1.0"
 
@@ -51,7 +51,7 @@ pipeline:
       agent: "quality:visual-verification"
       required: true
       blocking: true
-      model: opus  # Required for Claude Computer Use
+      model: opus  # Required for visual verification
 
 # =============================================================================
 # LAYER 1: PLAYWRIGHT CONFIGURATION
@@ -244,7 +244,7 @@ puppeteer_mcp:
     screenshot: 5000
 
 # =============================================================================
-# LAYER 3: VISUAL VERIFICATION (CLAUDE COMPUTER USE)
+# LAYER 3: VISUAL VERIFICATION
 # =============================================================================
 
 visual_verification:
@@ -457,7 +457,6 @@ cicd:
 
       visual_verification:
         # Visual verification typically runs locally or in special environments
-        # due to Claude Computer Use requirements
         note: "Typically run locally after CI Playwright passes"
         trigger: manual
 
@@ -474,7 +473,7 @@ cicd:
 # =============================================================================
 
 cost_optimization:
-  # Visual verification is expensive (opus + Computer Use)
+  # Visual verification is expensive (opus model)
   # Only run when necessary
 
   skip_visual_verification_when:
