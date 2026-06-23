@@ -35,7 +35,7 @@ sequential stages with parallel sub-agents within each.
 /devteam:build --feature "X" --dry-run
 ```
 
-## Argument validation (mirrored in `scripts/dry-run.sh`)
+## Argument Validation
 
 `--skip-stage` accepts:
 - A single value: `--skip-stage analytics`

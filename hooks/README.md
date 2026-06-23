@@ -125,7 +125,6 @@ cat .devteam/logs/hooks-*.jsonl | jq -s 'map(select(.exit_code != 0)) | length'
 | `session-start.sh` | Initializes or resumes session |
 | `session-end.sh` | Finalizes session, calculates costs |
 | `persistence-hook.sh` | Detects abandonment language, re-engages |
-| `scope-check.sh` | Validates file paths against task scope |
 | `run-hook.sh` | Shim: maps Qwen Code stdin JSON → QWEN_* env vars |
 | `graphfocus-hook.sh` | Auto-updates graphfocus index if stale (>24h) |
 

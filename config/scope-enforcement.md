@@ -156,104 +156,7 @@ validation_result:
 - Only in-scope changes can proceed
 ```
 
-## Layer 4: Pre-Commit Hook
-
-Automated enforcement at commit time:
-
-```bash
-#!/bin/bash
-# hooks/scope-check.sh
-
-set -e
-
-TASK_ID=$(cat .devteam/current-task.txt 2>/dev/null || echo "")
-
-if [ -z "$TASK_ID" ]; then
-    echo "Warning: No task context. Allowing commit."
-    exit 0
-fi
-
-TASK_FILE="docs/planning/tasks/${TASK_ID}.json"
-
-if [ ! -f "$TASK_FILE" ]; then
-    echo "Warning: Task file not found. Allowing commit."
-    exit 0
-fi
-
-# Get changed files
-CHANGED_FILES=$(git diff --cached --name-only)
-
-# Extract allowed patterns from task file
-ALLOWED_FILES=$(grep -A 100 "allowed_files:" "$TASK_FILE" | grep "^    - " | sed 's/^    - "//' | sed 's/"$//' | head -20)
-ALLOWED_PATTERNS=$(grep -A 100 "allowed_patterns:" "$TASK_FILE" | grep "^    - " | sed 's/^    - "//' | sed 's/"$//' | head -20)
-FORBIDDEN_FILES=$(grep -A 100 "forbidden_files:" "$TASK_FILE" | grep "^    - " | sed 's/^    - "//' | sed 's/"$//' | head -20)
-FORBIDDEN_DIRS=$(grep -A 100 "forbidden_directories:" "$TASK_FILE" | grep "^    - " | sed 's/^    - "//' | sed 's/"$//' | head -20)
-
-VIOLATIONS=""
-
-for FILE in $CHANGED_FILES; do
-    ALLOWED=false
-
-    # Check forbidden first
-    for FORBIDDEN in $FORBIDDEN_FILES; do
-        if [ "$FILE" = "$FORBIDDEN" ]; then
-            VIOLATIONS="$VIOLATIONS\n  FORBIDDEN: $FILE (in forbidden_files)"
-            continue 2
-        fi
-    done
-
-    for FORBIDDEN_DIR in $FORBIDDEN_DIRS; do
-        if [[ "$FILE" == "$FORBIDDEN_DIR"* ]]; then
-            VIOLATIONS="$VIOLATIONS\n  FORBIDDEN: $FILE (in forbidden_directories: $FORBIDDEN_DIR)"
-            continue 2
-        fi
-    done
-
-    # Check allowed
-    for ALLOWED_FILE in $ALLOWED_FILES; do
-        if [ "$FILE" = "$ALLOWED_FILE" ]; then
-            ALLOWED=true
-            break
-        fi
-    done
-
-    if [ "$ALLOWED" = false ]; then
-        for PATTERN in $ALLOWED_PATTERNS; do
-            if [[ "$FILE" == $PATTERN ]]; then
-                ALLOWED=true
-                break
-            fi
-        done
-    fi
-
-    if [ "$ALLOWED" = false ]; then
-        VIOLATIONS="$VIOLATIONS\n  OUT OF SCOPE: $FILE"
-    fi
-done
-
-if [ -n "$VIOLATIONS" ]; then
-    echo "╔══════════════════════════════════════════════════════════════╗"
-    echo "║              SCOPE VIOLATION - COMMIT BLOCKED                ║"
-    echo "╚══════════════════════════════════════════════════════════════╝"
-    echo ""
-    echo "Task: $TASK_ID"
-    echo ""
-    echo "The following files are outside the task scope:"
-    echo -e "$VIOLATIONS"
-    echo ""
-    echo "Options:"
-    echo "  1. Revert out-of-scope changes: git checkout -- <file>"
-    echo "  2. Update task scope if changes are truly required"
-    echo "  3. Create separate task for out-of-scope work"
-    echo ""
-    exit 1
-fi
-
-echo "✓ Scope check passed. All changes within task boundaries."
-exit 0
-```
-
-## Layer 5: Runtime File Access Control
+## Layer 4: Runtime File Access Control
 
 Track and limit file access during task execution:
 
@@ -319,10 +222,7 @@ Add scope constraint section to every agent.
 ### 3. Create Scope Validator Agent
 `agents/orchestration/scope-validator.md`
 
-### 4. Add Pre-Commit Hook
-`hooks/scope-check.sh`
-
-### 5. Update Task Loop
+### 4. Update Task Loop
 - Load scope before task execution
 - Pass scope to all agents
 - Run scope validator after each change

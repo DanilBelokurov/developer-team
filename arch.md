@@ -50,8 +50,8 @@ devteam/
 ├── commands/devteam/        # 16 slash-команд
 ├── skills/                  # 36 скилов (skills/kotlin/ + skills/analytics-stage/, etc.)
 ├── agents/                  # 26 сабагентов
-├── hooks/                   # 11 hook-скриптов + lib/hook-common.sh
-├── scripts/                 # state.sh, events.sh, checkpoint.sh, etc.
+├── hooks/                   # 9 hook-скриптов + lib/hook-common.sh
+├── scripts/                 # state.sh, events.sh, progress.sh, lib/common.sh
 ├── config/                  # config.yaml, config.md
 │
 ├── .devteam/                # Runtime state (gitignored)
@@ -214,7 +214,7 @@ tools:                # список инструментов
 
 ## 5. Хуки
 
-**11 hook-скриптов** в `hooks/`:
+**9 hook-скриптов** в `hooks/`:
 
 | Хук | Событие | Назначение |
 |---|---|---|
@@ -225,9 +225,7 @@ tools:                # список инструментов
 | `session-start.sh` | SessionStart | Init/resume сессии |
 | `session-end.sh` | SessionEnd | Финализация сессии |
 | `persistence-hook.sh` | Notification (idle_prompt) | Anti-abandonment |
-| `scope-check.sh` | (helper) | Реиспользуется pre-tool-use |
-| `graphfocus-hook.sh` | SessionStart | Auto-indexing knowledge graph |
-| `epiq-sync-hook.sh` | Notification | Epiq board sync |
+| `graphfocus-hook.sh` | PreToolUse (mcp__graphfocus__) | Auto-indexing knowledge graph |
 | `run-hook.sh` | (shim) | Maps stdin JSON → legacy env vars |
 
 **Exit codes:**

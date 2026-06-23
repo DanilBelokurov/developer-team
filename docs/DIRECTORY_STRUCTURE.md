@@ -159,46 +159,28 @@ devteam/
 │       └── base-agent.md
 │
 ├── hooks/                      # Lifecycle hooks
-│   ├── stop-hook.sh / .ps1     # Stop/completion hook
-│   ├── persistence-hook.sh / .ps1  # State persistence
-│   ├── scope-check.sh / .ps1   # Scope validation
-│   ├── pre-compact.sh / .ps1   # Pre-context-compaction
-│   ├── pre-tool-use-hook.sh / .ps1  # Pre-execution validation
-│   ├── post-tool-use-hook.sh / .ps1 # Post-execution logging
-│   ├── session-start.sh / .ps1 # Session initialization
-│   ├── session-end.sh / .ps1   # Session cleanup
-│   ├── install.sh / .ps1       # Hook installation
+│   ├── stop-hook.sh            # Stop/completion hook
+│   ├── persistence-hook.sh     # State persistence
+│   ├── pre-compact.sh          # Pre-context-compaction
+│   ├── pre-tool-use-hook.sh    # Pre-execution validation
+│   ├── post-tool-use-hook.sh   # Post-execution logging
+│   ├── session-start.sh       # Session initialization
+│   ├── session-end.sh          # Session cleanup
 │   ├── lib/                    # Shared hook utilities
-│   │   ├── hook-common.sh
-│   │   └── hook-common.ps1
-│   ├── tests/                  # Hook test suite
-│   │   └── test-hooks.sh
+│   │   └── hook-common.sh
 │   └── README.md
 │
 ├── templates/                  # Templates
 │   └── interview-questions.yaml  # Interview question templates
 │
 ├── scripts/                    # Utility scripts
-│   ├── schema.sql              # SQLite database schema (v1)
-│   ├── schema-v2.sql           # Schema migration v2
-│   ├── schema-v3.sql           # Schema migration v3
-│   ├── schema-v4.sql           # Schema migration v4
-│   ├── db-init.sh              # Database initialization (Linux/macOS)
-│   ├── db-init.ps1             # Database initialization (Windows)
-│   ├── db-maintenance.sh       # Database cleanup and optimization
-│   ├── state.sh                # State management functions (Bash)
-│   ├── state.ps1               # State management functions (PowerShell)
-│   ├── events.sh               # Event logging functions
-│   ├── baseline.sh             # Baseline commit management
-│   ├── checkpoint.sh           # Full agent state snapshots
-│   ├── cost-tracking.sh        # API cost monitoring
+│   ├── state.sh                # File-based state management
+│   ├── events.sh               # File-based event logging
 │   ├── progress.sh             # Session progress tracking
-│   ├── rollback.sh             # Auto-detect and revert regressions
-│   ├── validate-config.sh      # Config file validation
-│   ├── init-generator.sh       # Generate init.sh for dev server
+│   ├── state-init.sh           # State directory initialization
+│   ├── state-structure.md      # State file format reference
 │   └── lib/                    # Shared script utilities
-│       ├── common.sh
-│       └── progress.sh
+│       └── common.sh
 │
 ├── examples/                   # Usage examples
 │   ├── complete-workflow-example.md
@@ -236,17 +218,12 @@ your-project/
 │   │   ├── research_findings   # Research results
 │   │   ├── bugs                # Bug tracking
 │   │   └── escalations         # Model escalations
-│   ├── task-loop-config.yaml   # Configuration file
-│   ├── sprint-loop-config.yaml # Sprint loop settings
+│   ├── config.yaml             # Main DevTeam configuration
 │   ├── task-loop-config.yaml   # Task loop settings
-│   ├── test-config.yaml        # Test execution config
+│   ├── test-config.yaml        # Test execution config (deprecated)
 │   ├── testing-config.yaml     # Testing strategy config
 │   ├── code-review-config.yaml # Code review settings
-│   ├── database-config.yaml    # Database preferences
-│   ├── frontend-config.yaml    # Frontend settings
-│   ├── performance-config.yaml # Performance thresholds
 │   ├── refactoring-config.yaml # Refactoring rules
-│   ├── ux-config.yaml          # UX design settings
 │   └── validation-config.yaml  # Validation rules
 │
 ├── docs/
