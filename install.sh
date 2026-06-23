@@ -1,11 +1,22 @@
 #!/bin/bash
 # DevTeam Qwen Code extension installer.
-# Installs hooks, agents, commands, skills into target .qwen/ directory.
+# Installs hooks and initializes state — everything qwen extension doesn't support.
+#
+# What qwen extension installs automatically:
+#   - agents/, commands/, skills/ (via manifest)
+#   - MCP servers (via mcpServers in qwen-extension.json)
+#   - QWEN.md (via contextFileName)
+#
+# What install.sh handles:
+#   - Lifecycle hooks (PreToolUse, PostToolUse, Stop, etc.)
+#   - State initialization (.devteam/state/)
+#   - Sentinel file (idempotency check)
+#
 # Supports project-level (via project-path argument) and user-level (default) install.
 set -euo pipefail
 
 PLUGIN_DIR="$(cd "$(dirname "$0")" && pwd)"
-SCRIPT_DIR="${PLUGIN_DIR}/hooks"
+SCRIPT_DIR="${PLUGIN_DIR}/scripts"
 CONFIG_FILE="${PLUGIN_DIR}/hooks/hooks-config.json"
 
 RED='\033[0;31m'
@@ -25,7 +36,10 @@ usage() {
     cat <<EOF
 Usage: bash install.sh [project-path]
 
-Installs DevTeam into the target .qwen/ directory.
+Installs DevTeam hooks and state into the target .qwen/ directory.
+
+Note: agents, commands, skills, and MCP servers are installed automatically
+      by 'qwen extensions install .'. This script handles only hooks and state.
 
 Arguments:
   project-path    Optional path to a project. If provided, installs into
@@ -145,35 +159,18 @@ log_info "target: ${TARGET}"
 mkdir -p "${TARGET}"
 
 # ============================================================================
-# COPY TO TARGET
+# COPY HOOKS TO .devteam/hooks/
 # ============================================================================
 
 echo ""
-echo "Installing into ${TARGET}..."
+echo "Installing hooks into ${DEVTEAM_TARGET}/hooks/..."
 
-# Copy agents, commands, skills to .qwen/
-for dir in agents commands skills; do
-    if [ -d "${PLUGIN_DIR}/${dir}" ]; then
-        rm -rf "${TARGET}/${dir}"
-        cp -r "${PLUGIN_DIR}/${dir}" "${TARGET}/${dir}"
-        count=$(find "${TARGET}/${dir}" -name '*.md' 2>/dev/null | wc -l | tr -d ' ')
-        log_info "  ${dir}/ — ${count} files"
-    fi
-done
-
-# Create .devteam/ and copy hooks/, scripts/, config/
 mkdir -p "${DEVTEAM_TARGET}"
-rm -rf "${DEVTEAM_TARGET}/hooks" "${DEVTEAM_TARGET}/scripts" "${DEVTEAM_TARGET}/config"
+rm -rf "${DEVTEAM_TARGET}/hooks"
 cp -r "${PLUGIN_DIR}/hooks" "${DEVTEAM_TARGET}/hooks"
-cp -r "${PLUGIN_DIR}/scripts" "${DEVTEAM_TARGET}/scripts"
-cp -r "${PLUGIN_DIR}/config" "${DEVTEAM_TARGET}/config"
 
 count_hooks=$(find "${DEVTEAM_TARGET}/hooks" -name '*.sh' -o -name '*.js' -o -name '*.ps1' 2>/dev/null | wc -l | tr -d ' ')
-count_scripts=$(find "${DEVTEAM_TARGET}/scripts" -name '*.sh' 2>/dev/null | wc -l | tr -d ' ')
-count_configs=$(find "${DEVTEAM_TARGET}/config" -type f 2>/dev/null | wc -l | tr -d ' ')
-log_info "  .devteam/hooks/ — ${count_hooks} scripts"
-log_info "  .devteam/scripts/ — ${count_scripts} scripts"
-log_info "  .devteam/config/ — ${count_configs} config files"
+log_info "  hooks/ — ${count_hooks} scripts"
 
 # ============================================================================
 # MERGE HOOKS INTO settings.json
@@ -184,10 +181,9 @@ echo "Installing hooks into ${TARGET}/settings.json..."
 
 # Substitute __HOOK_BASE__ placeholder with absolute path
 # Use perl for cross-platform sed compatibility (macOS sed doesn't handle / in paths well)
-# Escape @ for perl (it interprets @ as array start, e.g. /path/@user/ becomes /path/)
+# Use SINGLE quotes for regex + variable outside to handle @ in paths
 HOOK_PATH="${DEVTEAM_TARGET}/hooks"
-HOOK_PATH="${HOOK_PATH//@/\\@}"
-HOOK_CONFIG="$(perl -pe "s|__HOOK_BASE__|${HOOK_PATH}|g" "$CONFIG_FILE")"
+HOOK_CONFIG="$(perl -pe 's|__HOOK_BASE__|'"${HOOK_PATH}"'|g' "$CONFIG_FILE")"
 
 if [ ! -f "${TARGET}/settings.json" ]; then
     echo "$HOOK_CONFIG" > "${TARGET}/settings.json"
@@ -233,7 +229,6 @@ fi
 
 echo ""
 echo "Initializing state..."
-mkdir -p "${TARGET}/scripts"
 # Project-level: .devteam/ lives next to .qwen/ (sibling layout)
 # User-level: .devteam/ lives inside .qwen/ (TARGET is ~/.qwen)
 if [ -n "$PROJECT_PATH" ]; then
@@ -241,7 +236,7 @@ if [ -n "$PROJECT_PATH" ]; then
 else
     STATE_ROOT="$TARGET"
 fi
-bash "${PLUGIN_DIR}/scripts/state-init.sh" "${STATE_ROOT}"
+bash "${SCRIPT_DIR}/state-init.sh" "${STATE_ROOT}"
 
 # ============================================================================
 # CREATE SENTINEL
@@ -261,11 +256,11 @@ echo ""
 echo "Installation complete!"
 echo ""
 echo "  Target:      ${TARGET}"
-echo "  Hooks:       ${TARGET}/settings.json"
-echo "  Agents:      ${TARGET}/agents/    ($(find "${TARGET}/agents" -name '*.md' 2>/dev/null | wc -l | tr -d ' ') files)"
-echo "  Commands:    ${TARGET}/commands/   ($(find "${TARGET}/commands" -name '*.md' 2>/dev/null | wc -l | tr -d ' ') files)"
-echo "  Skills:      ${TARGET}/skills/     ($(find "${TARGET}/skills" -name '*.md' 2>/dev/null | wc -l | tr -d ' ') files)"
-echo "  .devteam/:   ${DEVTEAM_TARGET}   (hooks, scripts, config, state)"
+echo "  Hooks:       ${DEVTEAM_TARGET}/hooks/"
+echo "  Settings:    ${TARGET}/settings.json"
+echo "  State:       ${DEVTEAM_TARGET}/state/"
+echo ""
+echo "Note: agents/, commands/, skills/ are installed via 'qwen extensions install .'"
 echo ""
 echo "Next steps:"
 echo "  1. Restart Qwen Code to load the extension"

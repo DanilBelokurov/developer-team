@@ -2,6 +2,23 @@
 
 All notable changes to devteam are documented in this file.
 
+## [6.5.0] — 2026-06-23 — Hybrid installation (qwen extension + install.sh)
+
+### Changed
+- **Two-step installation model**: `qwen extensions install .` + `bash install.sh`
+- **`qwen extension`** (manifest) installs: agents/, commands/, skills/, MCP servers, QWEN.md
+- **`install.sh`** (script) installs: lifecycle hooks, state initialization, sentinel
+- **Hooks no longer copied via manifest** — `qwen extension` doesn't support lifecycle hooks
+- **`install.sh`** refactored: removed agents/commands/skills copy, kept only hooks + state
+- **`uninstall.sh`** refactored: removes only what install.sh installs (hooks, state, sentinel)
+- **README.md** updated: two-step installation guide with clear component table
+- **QWEN.md** updated: installation section added, environment clarified
+
+### Rationale
+- `qwen extension` manifest supports: agents, commands, skills, mcpServers, contextFileName
+- `qwen extension` does NOT support: lifecycle hooks (PreToolUse, PostToolUse, Stop, etc.)
+- Hybrid model gives best of both: auto-update via extension + full hook support via script
+
 ## [6.4.1] — 2026-06-16 — Plan-isolated KV state
 
 ### Changed

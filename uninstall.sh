@@ -1,6 +1,16 @@
 #!/bin/bash
 # DevTeam Qwen Code extension uninstaller.
-# Removes DevTeam from the target .qwen/ directory.
+# Removes hooks and state — everything install.sh installed.
+#
+# What this script removes:
+#   - .devteam/hooks/ (lifecycle hooks)
+#   - .devteam/state/ (session state)
+#   - .devteam-installed (sentinel file)
+#   - hooks from settings.json
+#
+# What this script does NOT remove:
+#   - agents/, commands/, skills/ (managed by 'qwen extensions uninstall .')
+#
 # Supports project-level (via project-path argument) and user-level (default) uninstall.
 set -euo pipefail
 
@@ -23,7 +33,10 @@ usage() {
     cat <<EOF
 Usage: bash uninstall.sh [project-path]
 
-Uninstalls DevTeam from the target .qwen/ directory.
+Uninstalls DevTeam hooks and state from the target .qwen/ directory.
+
+Note: agents/, commands/, skills/ are managed by 'qwen extensions uninstall .'
+      and are NOT removed by this script.
 
 Arguments:
   project-path    Optional path to a project. If provided, uninstalls from
@@ -93,23 +106,32 @@ rm -f "$SENTINEL"
 log_info "removed ${SENTINEL}"
 
 # ============================================================================
-# REMOVE agents/, commands/, skills/, .devteam/
+# REMOVE .devteam/hooks/ AND .devteam/state/
 # ============================================================================
 
-echo ""
-echo "Removing DevTeam files..."
-for dir in agents commands skills; do
-    if [ -d "${TARGET}/${dir}" ]; then
-        rm -rf "${TARGET}/${dir}"
-        log_info "  removed ${TARGET}/${dir}/"
-    fi
-done
-
-# Remove .devteam/ (hooks, scripts, configs, state)
 DEVTEAM_TARGET="${TARGET}/.devteam"
+
+echo ""
+echo "Removing DevTeam hooks and state..."
+
+# Remove hooks/ (lifecycle hooks installed by install.sh)
+if [ -d "${DEVTEAM_TARGET}/hooks" ]; then
+    rm -rf "${DEVTEAM_TARGET}/hooks"
+    log_info "  removed ${DEVTEAM_TARGET}/hooks/"
+fi
+
+# Remove state/ (session state initialized by install.sh)
+if [ -d "${DEVTEAM_TARGET}/state" ]; then
+    rm -rf "${DEVTEAM_TARGET}/state"
+    log_info "  removed ${DEVTEAM_TARGET}/state/"
+fi
+
+# Remove .devteam/ entirely if empty (only config might remain)
 if [ -d "${DEVTEAM_TARGET}" ]; then
-    rm -rf "${DEVTEAM_TARGET}"
-    log_info "  removed ${DEVTEAM_TARGET}/"
+    if [ -z "$(ls -A "${DEVTEAM_TARGET}" 2>/dev/null)" ]; then
+        rmdir "${DEVTEAM_TARGET}"
+        log_info "  removed empty ${DEVTEAM_TARGET}/"
+    fi
 fi
 
 # ============================================================================
@@ -141,7 +163,12 @@ fi
 
 echo ""
 log_info "Uninstall complete!"
+echo ""
 echo "  Target:   ${TARGET}"
 echo "  Sentinel: removed"
-echo "  Files:   removed"
-echo "  State:   removed"
+echo "  Hooks:    removed"
+echo "  State:    removed"
+echo ""
+echo "Note: agents/, commands/, skills/ are managed by 'qwen extensions uninstall .'"
+echo "      To fully remove DevTeam, also run:"
+echo "        qwen extensions uninstall devteam"

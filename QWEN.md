@@ -163,7 +163,6 @@ with a structured failure report.
 - Events: `.devteam/state/events/<date>-events.md` (append-only)
 - Plans: `.devteam/plans/<plan-id>/` (unchanged)
 - Stage tracking: plan-isolated KV (`set_kv_state <key> <value> $PLAN_ID`)
-- Hooks: `~/.qwen/settings.json` (managed by `install.sh`, shell + jq)
 
 v6.1 used SQLite; v6.2 replaced with file-based state for zero
 external dependencies. See `scripts/state-structure.md` for full layout.
@@ -171,11 +170,23 @@ external dependencies. See `scripts/state-structure.md` for full layout.
 The `Stop` hook blocks session exit until `TASK_COMPLETE: <id>` and
 `EXIT_SIGNAL: true` are emitted.
 
+## Installation (two-step)
+
+DevTeam uses a hybrid installation model:
+
+| Component | Installation |
+|-----------|--------------|
+| agents/, commands/, skills/, MCP servers, QWEN.md | `qwen extensions install .` |
+| Lifecycle hooks, state, sentinel | `bash install.sh` |
+
+See `README.md` for full installation instructions.
+
 ## Environment
 
 - Extension root: `$QWEN_PROJECT_DIR`
 - Override: `DEVTEAM_ROOT` env var
 - Hooks command: `$QWEN_PROJECT_DIR/hooks/run-hook.sh <hook-name>`
+- Hooks installed by: `bash install.sh` (not by `qwen extension`)
 
 ## Configuration
 
