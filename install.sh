@@ -52,6 +52,11 @@ command -v git     >/dev/null 2>&1 || MISSING+=("git")
 command -v jq      >/dev/null 2>&1 || MISSING+=("jq")
 command -v python3 >/dev/null 2>&1 || MISSING+=("python3")
 
+# uv is recommended but optional — only required for auto-installing
+# the graphfocus MCP server. If missing, the install proceeds but
+# graphfocus won't be configured automatically.
+command -v uv >/dev/null 2>&1 && HAS_UV=1 || HAS_UV=0
+
 if [ ${#MISSING[@]} -gt 0 ]; then
     log_error "missing required tools: ${MISSING[*]}"
     echo "  Install jq:       https://jqlang.github.io/jq/download/"
@@ -62,6 +67,11 @@ fi
 PYTHON_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
 JQ_VERSION=$(jq --version)
 log_info "prerequisites OK (git, python${PYTHON_VERSION}, jq ${JQ_VERSION})"
+
+if [ "$HAS_UV" -eq 0 ]; then
+    log_warn "uv not found — graphfocus MCP server will not be auto-installed"
+    log_warn "  Install uv: https://docs.astral.sh/uv/getting-started/installation/"
+fi
 
 # ============================================================================
 # RESOLVE TARGET DIRECTORY
@@ -138,6 +148,119 @@ else
 fi
 
 # ============================================================================
+# GRAPHFOCUS MCP INSTALLATION
+# ============================================================================
+# Install graphfocus (knowledge graph for code analysis) into a dedicated
+# virtual environment under <mcp-servers>/graphfocus/.venv. Self-contained
+# — no system-wide Python pollution, no PATH conflicts. Idempotent: skip
+# if already configured in either the global user-level or target settings.json.
+
+echo ""
+echo "Setting up graphfocus MCP server..."
+
+# Resolve the mcp-servers/ directory based on install level.
+if [ -n "$PROJECT_PATH" ]; then
+    MCP_SERVERS_DIR="${DEVTEAM_TARGET}/mcp-servers"
+else
+    MCP_SERVERS_DIR="${HOME}/mcp-servers"
+fi
+
+# Where the venv lives and the shim inside it that we'll point MCP at.
+GRAPHFOCUS_VENV_DIR="${MCP_SERVERS_DIR}/graphfocus/.venv"
+GRAPHFOCUS_BIN="${GRAPHFOCUS_VENV_DIR}/bin/graphfocus"
+
+GLOBAL_SETTINGS="${HOME}/.qwen/settings.json"
+# TARGET settings.json may not exist yet — is_graphfocus_configured handles it.
+
+is_graphfocus_configured() {
+    local f="$1"
+    [[ ! -f "$f" ]] && return 1
+    # .mcpServers.graphfocus truthy → already configured
+    if jq -e '.mcpServers.graphfocus // empty' "$f" >/dev/null 2>&1; then
+        return 0
+    fi
+    return 1
+}
+
+GRAPHFOCUS_INSTALLED=false
+GRAPHFOCUS_BIN_PATH=""  # absolute path to use in settings.json
+
+if is_graphfocus_configured "$GLOBAL_SETTINGS"; then
+    log_info "graphfocus MCP already configured in ${GLOBAL_SETTINGS} — skipping install"
+    GRAPHFOCUS_INSTALLED=true
+    GRAPHFOCUS_BIN_PATH="graphfocus"
+elif is_graphfocus_configured "${TARGET}/settings.json"; then
+    log_info "graphfocus MCP already configured in ${TARGET}/settings.json — skipping install"
+    GRAPHFOCUS_INSTALLED=true
+    GRAPHFOCUS_BIN_PATH="graphfocus"
+elif [[ -x "$GRAPHFOCUS_BIN" ]]; then
+    log_info "graphfocus venv already exists at ${GRAPHFOCUS_VENV_DIR}"
+    GRAPHFOCUS_INSTALLED=true
+    GRAPHFOCUS_BIN_PATH="$GRAPHFOCUS_BIN"
+else
+    if [ "$HAS_UV" -eq 0 ]; then
+        log_warn "uv not found — cannot auto-install graphfocus"
+        log_warn "  Install uv (https://docs.astral.sh/uv/) then run install.sh again"
+        log_warn "  Or manually:"
+        log_warn "    uv venv ${GRAPHFOCUS_VENV_DIR}"
+        log_warn "    uv pip install --python ${GRAPHFOCUS_VENV_DIR}/bin/python 'graphfocus[all]'"
+        GRAPHFOCUS_INSTALLED=false
+    else
+        log_info "installing graphfocus into venv at ${GRAPHFOCUS_VENV_DIR}..."
+        mkdir -p "${MCP_SERVERS_DIR}/graphfocus"
+
+        if uv venv "$GRAPHFOCUS_VENV_DIR" 2>&1 | tee /tmp/graphfocus-venv.log; then
+            if uv pip install \
+                --python "${GRAPHFOCUS_VENV_DIR}/bin/python" \
+                --quiet \
+                'graphfocus[all]' 2>&1 | tee /tmp/graphfocus-install.log; then
+                if [[ -x "$GRAPHFOCUS_BIN" ]]; then
+                    GRAPHFOCUS_INSTALLED=true
+                    GRAPHFOCUS_BIN_PATH="$GRAPHFOCUS_BIN"
+                    log_info "graphfocus installed: ${GRAPHFOCUS_BIN}"
+                else
+                    log_warn "pip install succeeded but ${GRAPHFOCUS_BIN} not found"
+                fi
+            else
+                log_warn "uv pip install failed — see /tmp/graphfocus-install.log"
+                log_warn "  Re-run, or install manually:"
+                log_warn "    uv pip install --python ${GRAPHFOCUS_VENV_DIR}/bin/python 'graphfocus[all]'"
+            fi
+        else
+            log_warn "uv venv creation failed — see /tmp/graphfocus-venv.log"
+        fi
+    fi
+fi
+
+if [[ "$GRAPHFOCUS_INSTALLED" == "true" ]]; then
+    log_info "graphfocus mcp-servers directory: ${MCP_SERVERS_DIR}/graphfocus"
+
+    # Drop a small README so the directory isn't empty and explains its role.
+    cat > "${MCP_SERVERS_DIR}/graphfocus/README.md" <<EOF
+# graphfocus MCP server
+
+This directory is managed by DevTeam's install.sh. It is the
+project- (or user-) level home for graphfocus-related artifacts.
+
+graphfocus is installed in an isolated Python virtual environment at:
+  ${GRAPHFOCUS_VENV_DIR}
+
+The MCP server is invoked via the entry-point shim:
+  ${GRAPHFOCUS_BIN}
+
+To upgrade graphfocus:
+\`\`\`bash
+uv pip install --upgrade --python ${GRAPHFOCUS_VENV_DIR}/bin/python 'graphfocus[all]'
+\`\`\`
+
+To remove:
+\`\`\`bash
+rm -rf ${MCP_SERVERS_DIR}/graphfocus
+\`\`\`
+EOF
+fi
+
+# ============================================================================
 # CREATE TARGET DIRECTORY
 # ============================================================================
 
@@ -191,8 +314,26 @@ PERL_ESCAPED_TARGET="${DEVTEAM_TARGET//\\/\\\\}"
 PERL_ESCAPED_TARGET="${PERL_ESCAPED_TARGET//@/\\@}"
 HOOK_CONFIG="$(perl -pe 's|__HOOK_BASE__|'"${PERL_ESCAPED_TARGET}"'/hooks|g' "$CONFIG_FILE")"
 
+# Build the combined config to write into settings.json: hooks + (optional)
+# mcpServers.graphfocus. Combining before the merge avoids two separate
+# jq passes and produces a single atomic write.
+#
+# GRAPHFOCUS_BIN_PATH is the absolute path to the venv entry-point shim
+# (set during the GRAPHFOCUS MCP INSTALLATION step above). It is fed
+# through jq's --arg so any characters in the path — including spaces
+# and "@" — are correctly JSON-escaped.
+COMBINED_CONFIG="$HOOK_CONFIG"
+if [[ "$GRAPHFOCUS_INSTALLED" == "true" ]]; then
+    MCP_CONFIG=$(jq -n \
+        --arg cmd "$GRAPHFOCUS_BIN_PATH" \
+        '{mcpServers: {graphfocus: {type: "stdio", command: $cmd, args: ["mcp"]}}}')
+    COMBINED_CONFIG=$(jq -s '.[0] + .[1]' \
+        <(printf '%s' "$HOOK_CONFIG") \
+        <(printf '%s' "$MCP_CONFIG")) || COMBINED_CONFIG="$HOOK_CONFIG"
+fi
+
 if [ ! -f "${TARGET}/settings.json" ]; then
-    echo "$HOOK_CONFIG" > "${TARGET}/settings.json"
+    echo "$COMBINED_CONFIG" > "${TARGET}/settings.json"
     log_info "created ${TARGET}/settings.json"
 else
     # Guard against an existing-but-empty settings.json — jq emits nothing on
@@ -206,7 +347,7 @@ else
     tmp_file="$(mktemp)"
     trap "rm -f '$tmp_file'" EXIT
 
-    jq -n --argjson newcfg "$HOOK_CONFIG" --argjson existing "$EXISTING_CONFIG" '
+    jq -n --argjson newcfg "$COMBINED_CONFIG" --argjson existing "$EXISTING_CONFIG" '
       def deep_merge($a; $b):
         if ($a | type) == "object" and ($b | type) == "object" then
           ($a | keys) as $akeys | ($b | keys) as $bkeys |
@@ -270,6 +411,9 @@ echo "  Agents:      ${TARGET}/agents/    ($(find "${TARGET}/agents" -name '*.md
 echo "  Commands:    ${TARGET}/commands/   ($(find "${TARGET}/commands" -name '*.md' 2>/dev/null | wc -l | tr -d ' ') files)"
 echo "  Skills:      ${TARGET}/skills/     ($(find "${TARGET}/skills" -name '*.md' 2>/dev/null | wc -l | tr -d ' ') files)"
 echo "  .devteam/:   ${DEVTEAM_TARGET}   (hooks, scripts, config, state)"
+if [[ "$GRAPHFOCUS_INSTALLED" == "true" ]]; then
+    echo "  graphfocus:  ${MCP_SERVERS_DIR}/graphfocus"
+fi
 echo ""
 echo "Next steps:"
 echo "  1. Restart Qwen Code to load the extension"
@@ -277,3 +421,6 @@ echo "  2. Verify: /skills (should show devteam skills)"
 echo "  3. Verify: /agents manage (should show subagents)"
 echo "  4. Verify: /devteam:status"
 echo "  5. (Optional) Set GITHUB_TOKEN for GitHub MCP integration"
+if [[ "$GRAPHFOCUS_INSTALLED" == "true" ]]; then
+    echo "  6. (Optional) Run 'graphfocus analyze .' in your project to build the knowledge graph"
+fi

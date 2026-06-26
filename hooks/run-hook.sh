@@ -46,22 +46,22 @@ if [[ -n "$STDIN_JSON" ]]; then
       [[ -z "$key" ]] && continue
       printf 'export %s=%q\n' "$key" "$value"
     done < <(printf '%s' "$STDIN_JSON" | jq -r '
-        def emit($k; $v): if $v == null then empty else [$k, ($v | tostring)] | @tsv end;
+        def emit($k; $v): if $v == null then empty else "\($k)=\($v|tostring)" end;
 
-        emit("QWEN_SESSION_ID";    .session_id);
-        emit("QWEN_CWD";           .cwd);
-        emit("QWEN_TIMESTAMP";     .timestamp);
-        emit("QWEN_TOOL_NAME";     .tool_name);
-        emit("QWEN_TOOL_INPUT";    .tool_input);
-        emit("QWEN_TOOL_USE_ID";   .tool_use_id);
-        emit("STOP_HOOK_MESSAGE";    .last_assistant_message);
-        emit("QWEN_OUTPUT";        .last_assistant_message);
-        emit("QWEN_PERMISSION_MODE"; .permission_mode);
-        emit("QWEN_SESSION_SOURCE";  .source);
+        emit("QWEN_SESSION_ID";    .session_id),
+        emit("QWEN_CWD";           .cwd),
+        emit("QWEN_TIMESTAMP";     .timestamp),
+        emit("QWEN_TOOL_NAME";     .tool_name),
+        emit("QWEN_TOOL_INPUT";    .tool_input),
+        emit("QWEN_TOOL_USE_ID";   .tool_use_id),
+        emit("STOP_HOOK_MESSAGE";    .last_assistant_message),
+        emit("QWEN_OUTPUT";        .last_assistant_message),
+        emit("QWEN_PERMISSION_MODE"; .permission_mode),
+        emit("QWEN_SESSION_SOURCE";  .source),
 
         if .notification_type then
-          emit("QWEN_TOOL_NAME";  "Notification");
-          ("QWEN_TOOL_INPUT=\( {type: .notification_type} | tostring )" | @tsv)
+          emit("QWEN_TOOL_NAME";  "Notification"),
+          emit("QWEN_TOOL_INPUT";  ("{type: \(.notification_type)}" | tostring))
         else empty end
     ')
   else
