@@ -131,9 +131,9 @@ devteam/
 
 1. Create `hooks/<event-name>.sh` (or `.ps1` for Windows).
 2. The script receives input from Qwen Code via stdin (JSON). If you
-   need the legacy env-var contract (`CLAUDE_TOOL_NAME`, etc.), invoke
-   through `hooks/run-hook.sh` which maps Qwen Code's stdin JSON to those
-   env vars automatically.
+   need the env-var contract (`QWEN_TOOL_NAME`, etc.), invoke through
+   `hooks/run-hook.sh` which maps Qwen Code's stdin JSON to those env vars
+   automatically.
 3. Exit codes:
    - `0` — success, continue
    - `2` — blocking error; stderr is shown to the model

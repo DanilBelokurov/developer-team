@@ -7,7 +7,7 @@
 #   2 = Block and re-engage (detected abandonment attempt)
 #
 # Environment variables expected:
-#   CLAUDE_OUTPUT — last assistant message
+#   QWEN_OUTPUT — last assistant message
 
 set -uo pipefail
 
@@ -29,7 +29,7 @@ prime_hot_cache
 # CONFIGURATION
 # ============================================================================
 
-MESSAGE="${CLAUDE_OUTPUT:-}"
+MESSAGE="${QWEN_OUTPUT:-}"
 [[ -z "$MESSAGE" ]] && exit 0
 
 # ============================================================================

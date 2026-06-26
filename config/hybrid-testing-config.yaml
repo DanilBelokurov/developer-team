@@ -244,7 +244,7 @@ puppeteer_mcp:
     screenshot: 5000
 
 # =============================================================================
-# LAYER 3: VISUAL VERIFICATION (CLAUDE COMPUTER USE)
+# LAYER 3: VISUAL VERIFICATION (QWEN COMPUTER USE)
 # =============================================================================
 
 visual_verification:

@@ -25,7 +25,7 @@ All dispatched in a **single assistant turn** (true parallelism):
 | `db-schema-reader` | yes | never |
 | `code-archaeologist` | hybrid only | greenfield projects |
 | `api-spec-reader` | when OpenAPI/Swagger detected | no spec found |
-| `graph-code-analyst` | when `graphify-out/graph.json` exists | graphify not run |
+| `graph-code-analyst` | when `graphfocus-out/graph.json` exists | graphfocus not run |
 
 ## Predicates (compute before dispatch)
 
@@ -40,20 +40,20 @@ has_api_spec = any([
     Path('**/swagger.json'),
 ])
 has_atlassian_config = Path('.devteam/atlassian-config.yaml').exists()
-has_graphify = Path('graphify-out/graph.json').exists()
+has_graphfocus = Path('graphfocus-out/graph.json').exists()
 ```
 
-## Graphify Requirement
+## GraphFocus Requirement
 
-Graphify is **required** for analytics. If `graphify-out/graph.json`
+GraphFocus is **required** for analytics. If `graphfocus-out/graph.json`
 does not exist, emit an error and halt:
 
 ```
-"Graphify is required for analytics. Run 'graphify .' first, then
+"GraphFocus is required for analytics. Run 'graphfocus analyze .' first, then
 retry /devteam:analyze."
 ```
 
-Before starting analytics, ensure graphify has been run in the project.
+Before starting analytics, ensure graphfocus has been run in the project.
 
 ## Dispatch pattern
 
@@ -76,7 +76,7 @@ if is_hybrid_predicate:
     agent(subagent_type="code-archaeologist", prompt=f"Feature: {feature}. Output: analysis.md")
 if has_api_spec:
     agent(subagent_type="api-spec-reader", prompt=f"Feature: {feature}. Output: analysis.md")
-if has_graphify:
+if has_graphfocus:
     agent(subagent_type="graph-code-analyst", prompt=f"Feature: {feature}. Output: analysis.md")
 ```
 
@@ -88,7 +88,7 @@ execution. Do not chain them sequentially.
 `.devteam/plans/<plan-id>/analysis.md` with sections:
 - Requirements (from `requirements-analyst`; includes Jira epics/stories and Confluence docs if Atlassian MCP is configured)
 - Entity Map (from `db-schema-reader`)
-- Existing Patterns (from `code-archaeologist`, if hybrid; additionally from `graph-code-analyst` via knowledge graph if graphify-out/graph.json exists)
+- Existing Patterns (from `code-archaeologist`, if hybrid; additionally from `graph-code-analyst` via knowledge graph if graphfocus-out/graph.json exists)
 - API Contract (from `api-spec-reader`, if spec found)
 - Package Layout (used by Stage 2 to derive file partitions)
 

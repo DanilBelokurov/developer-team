@@ -137,27 +137,27 @@ echo "Testing: Persistence Hook"
 echo ""
 
 # Test: Detects "I give up"
-export CLAUDE_OUTPUT="I give up on this task"
+export QWEN_OUTPUT="I give up on this task"
 run_test "detects 'I give up'" 2 "$HOOKS_DIR/persistence-hook.sh"
 
 # Test: Detects "I'm stuck"
-export CLAUDE_OUTPUT="I'm stuck and cannot proceed"
+export QWEN_OUTPUT="I'm stuck and cannot proceed"
 run_test "detects 'I'm stuck'" 2 "$HOOKS_DIR/persistence-hook.sh"
 
 # Test: Allows EXIT_SIGNAL
-export CLAUDE_OUTPUT="Task complete. EXIT_SIGNAL: true"
+export QWEN_OUTPUT="Task complete. EXIT_SIGNAL: true"
 run_test "allows EXIT_SIGNAL" 0 "$HOOKS_DIR/persistence-hook.sh"
 
 # Test: Allows empty message
-export CLAUDE_OUTPUT=""
+export QWEN_OUTPUT=""
 run_test "allows empty message" 0 "$HOOKS_DIR/persistence-hook.sh"
 
 # Test: Detects passive abandonment
-export CLAUDE_OUTPUT="Let me know if you need anything else"
+export QWEN_OUTPUT="Let me know if you need anything else"
 run_test "detects passive abandonment" 2 "$HOOKS_DIR/persistence-hook.sh"
 
 # Test: Allows normal completion
-export CLAUDE_OUTPUT="All tests passing. Implementation complete."
+export QWEN_OUTPUT="All tests passing. Implementation complete."
 run_test "allows normal completion" 0 "$HOOKS_DIR/persistence-hook.sh"
 
 echo ""
@@ -203,28 +203,28 @@ echo "Testing: Pre-Tool-Use Hook"
 echo ""
 
 # Test: Allows normal tool use
-export CLAUDE_TOOL_NAME="Read"
-export CLAUDE_TOOL_INPUT='{"file_path": "/some/file.txt"}'
+export QWEN_TOOL_NAME="Read"
+export QWEN_TOOL_INPUT='{"file_path": "/some/file.txt"}'
 run_test "allows Read tool" 0 "$HOOKS_DIR/pre-tool-use-hook.sh"
 
 # Test: Allows empty tool name
-export CLAUDE_TOOL_NAME=""
-export CLAUDE_TOOL_INPUT=""
+export QWEN_TOOL_NAME=""
+export QWEN_TOOL_INPUT=""
 run_test "allows empty tool name" 0 "$HOOKS_DIR/pre-tool-use-hook.sh"
 
 # Test: Blocks dangerous rm -rf /
-export CLAUDE_TOOL_NAME="Bash"
-export CLAUDE_TOOL_INPUT='{"command": "rm -rf /"}'
+export QWEN_TOOL_NAME="Bash"
+export QWEN_TOOL_INPUT='{"command": "rm -rf /"}'
 run_test "blocks rm -rf /" 2 "$HOOKS_DIR/pre-tool-use-hook.sh"
 
 # Test: Blocks dangerous force push
-export CLAUDE_TOOL_NAME="Bash"
-export CLAUDE_TOOL_INPUT='{"command": "git push --force main"}'
+export QWEN_TOOL_NAME="Bash"
+export QWEN_TOOL_INPUT='{"command": "git push --force main"}'
 run_test "blocks force push to main" 2 "$HOOKS_DIR/pre-tool-use-hook.sh"
 
 # Test: Allows safe bash command
-export CLAUDE_TOOL_NAME="Bash"
-export CLAUDE_TOOL_INPUT='{"command": "ls -la"}'
+export QWEN_TOOL_NAME="Bash"
+export QWEN_TOOL_INPUT='{"command": "ls -la"}'
 run_test "allows safe bash command" 0 "$HOOKS_DIR/pre-tool-use-hook.sh"
 
 echo ""
@@ -237,21 +237,21 @@ echo "Testing: Post-Tool-Use Hook"
 echo ""
 
 # Test: Handles empty result
-export CLAUDE_TOOL_NAME="Bash"
-export CLAUDE_TOOL_RESULT=""
+export QWEN_TOOL_NAME="Bash"
+export QWEN_TOOL_RESULT=""
 run_test "handles empty result" 0 "$HOOKS_DIR/post-tool-use-hook.sh"
 
 # Test: Detects test failure
-export CLAUDE_TOOL_NAME="Bash"
-export CLAUDE_TOOL_RESULT="FAILED: 3 tests failed"
+export QWEN_TOOL_NAME="Bash"
+export QWEN_TOOL_RESULT="FAILED: 3 tests failed"
 run_test "detects test failure" 0 "$HOOKS_DIR/post-tool-use-hook.sh"
 
 # Reset failure counter for next test
 echo "0" > "$TEST_DIR/.devteam/consecutive-failures.txt"
 
 # Test: Detects success
-export CLAUDE_TOOL_NAME="Bash"
-export CLAUDE_TOOL_RESULT="All tests passing. 10 tests passed."
+export QWEN_TOOL_NAME="Bash"
+export QWEN_TOOL_RESULT="All tests passing. 10 tests passed."
 run_test "detects success" 0 "$HOOKS_DIR/post-tool-use-hook.sh"
 
 echo ""

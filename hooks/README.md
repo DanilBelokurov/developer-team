@@ -75,7 +75,7 @@ Qwen Code was launched.
 
 Qwen Code passes hook input as JSON via stdin. The shim at
 `hooks/run-hook.sh` parses stdin and exports legacy env vars
-(`CLAUDE_TOOL_NAME`, `CLAUDE_TOOL_INPUT`, etc.) so the existing
+(`QWEN_TOOL_NAME`, `QWEN_TOOL_INPUT`, etc.) so the existing
 9 hook scripts continue to work.
 
 ## Hook Scripts

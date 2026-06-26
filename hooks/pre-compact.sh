@@ -114,7 +114,7 @@ FOOTER
 }
 
 # ============================================
-# OUTPUT CONTEXT FOR CLAUDE
+# OUTPUT CONTEXT FOR QWEN
 # ============================================
 output_context() {
     # This output will be preserved in Claude's context after compaction

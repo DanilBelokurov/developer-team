@@ -15,8 +15,8 @@ Initialize-Hook "post-tool-use"
 # CONFIGURATION
 # ============================================================================
 
-$ToolName = $env:CLAUDE_TOOL_NAME
-$ToolResult = $env:CLAUDE_TOOL_RESULT
+$ToolName = $env:QWEN_TOOL_NAME
+$ToolResult = $env:QWEN_TOOL_RESULT
 
 # ============================================================================
 # OUTCOME DETECTION PATTERNS

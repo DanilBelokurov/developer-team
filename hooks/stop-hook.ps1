@@ -16,7 +16,7 @@ Initialize-Hook "stop"
 # CONFIGURATION
 # ============================================================================
 
-$MESSAGE = if ($env:STOP_HOOK_MESSAGE) { $env:STOP_HOOK_MESSAGE } else { $env:CLAUDE_OUTPUT }
+$MESSAGE = if ($env:STOP_HOOK_MESSAGE) { $env:STOP_HOOK_MESSAGE } else { $env:QWEN_OUTPUT }
 
 # ============================================================================
 # VALID EXIT SIGNALS

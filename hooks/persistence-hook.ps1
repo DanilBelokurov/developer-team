@@ -16,7 +16,7 @@ Initialize-Hook "persistence"
 # CONFIGURATION
 # ============================================================================
 
-$MESSAGE = $env:CLAUDE_OUTPUT
+$MESSAGE = $env:QWEN_OUTPUT
 $ABANDONMENT_LOG = Join-Path $script:DEVTEAM_DIR "abandonment-attempts.log"
 
 # If no message, allow

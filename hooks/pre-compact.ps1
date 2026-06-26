@@ -127,7 +127,7 @@ If resuming after compaction:
 }
 
 # ============================================
-# OUTPUT CONTEXT FOR CLAUDE
+# OUTPUT CONTEXT FOR QWEN
 # ============================================
 function Output-Context {
     # This output will be preserved in Claude's context after compaction

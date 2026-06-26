@@ -203,7 +203,7 @@ quality_gates:
 - 35 skills in `skills/`
 - 25 upstream skills (synced via `scripts/sync-kotlin-skills.sh`)
 - Detailed architecture: `arch.md`
-- Migration notes: `docs/MIGRATION_FROM_CLAUDE.md` and
+- Migration notes: `docs/MIGRATION_FROM_ANTHROPIC.md` and
   `legacy/claude-code/MIGRATION_REFERENCE.md`
 
 ## Do NOT

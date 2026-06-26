@@ -280,10 +280,10 @@ mcp_notify() {
 }
 
 # ============================================================================
-# CLAUDE CONTEXT
+# QWEN CONTEXT
 # ============================================================================
 
-get_claude_context() {
+get_qwen_context() {
     local session_id; session_id=$(get_current_session)
     local task_id; task_id=$(get_current_task)
     local iteration; iteration=$(get_current_iteration)

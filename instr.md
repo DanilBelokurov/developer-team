@@ -739,7 +739,7 @@ Development (перед Testing) — потенциально в v6.2.
 
 - **Архитектура**: см. `arch.md`
 - **Миграция с v5.0.0 (Claude Code plugin)**: см.
-  `docs/MIGRATION_FROM_CLAUDE.md`
+  `docs/MIGRATION_FROM_ANTHROPIC.md`
 - **Для контрибьюторов**: см. `CONTRIBUTING.md`
 - **GitHub issues**: https://github.com/michael-harris/devteam/issues
 - **Документация Qwen Code**: https://qwen-code.dev/docs

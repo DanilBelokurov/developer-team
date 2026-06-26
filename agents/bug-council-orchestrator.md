@@ -38,7 +38,7 @@ Activate Bug Council when:
 
 ## Agent Teams Mode (Preferred)
 
-When Agent Teams is enabled (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`), the Bug Council runs as a **true parallel team** with inter-agent communication:
+When Agent Teams is enabled (Qwen Code native parallel subagents), the Bug Council runs as a **true parallel team** with inter-agent communication:
 
 ### Team Configuration
 

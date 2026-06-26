@@ -184,7 +184,7 @@ power, no transactional semantics. For DevTeam's scale, negligible.
 - `legacy/claude-code/MIGRATION_REFERENCE.md` — table of all
   env-vars, file paths, and format differences for users porting
   workflows back to Claude Code or contributing upstream.
-- `docs/MIGRATION_FROM_CLAUDE.md` — user-facing guide for adapting
+- `docs/MIGRATION_FROM_ANTHROPIC.md` — user-facing guide for adapting
   existing Claude Code plugin workflows to the Qwen Code extension.
 
 ## [4.x] — Claude Code plugin (legacy)

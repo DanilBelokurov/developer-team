@@ -26,7 +26,7 @@ if ! command -v graphfocus &>/dev/null; then
 fi
 
 # GraphFocus output directory
-GRAPH_DIR="${CLAUDE_CWD:-.}"/graphfocus-out
+GRAPH_DIR="${QWEN_CWD:-.}"/graphfocus-out
 INDEX_AGE_HOURS=24
 
 # Helper to get index age in hours

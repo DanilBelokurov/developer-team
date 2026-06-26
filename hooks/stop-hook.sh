@@ -8,7 +8,7 @@
 #   2 = Block exit and re-inject prompt (work not complete)
 #
 # Environment variables expected:
-#   STOP_HOOK_MESSAGE or CLAUDE_OUTPUT — last assistant message
+#   STOP_HOOK_MESSAGE or QWEN_OUTPUT — last assistant message
 
 set -uo pipefail
 
@@ -30,7 +30,7 @@ prime_hot_cache
 # CONFIGURATION
 # ============================================================================
 
-MESSAGE="${STOP_HOOK_MESSAGE:-${CLAUDE_OUTPUT:-}}"
+MESSAGE="${STOP_HOOK_MESSAGE:-${QWEN_OUTPUT:-}}"
 
 # ============================================================================
 # VALID EXIT SIGNALS
@@ -221,7 +221,7 @@ Include EXIT_SIGNAL: true when properly complete.
     # Refresh cache so next hook event sees the new iteration count.
     prime_hot_cache
 
-    mcp_notify "exit_blocked" "$(get_claude_context)"
+    mcp_notify "exit_blocked" "$(get_qwen_context)"
 
     exit 2
 }

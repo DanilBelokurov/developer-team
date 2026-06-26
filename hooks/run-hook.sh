@@ -3,7 +3,7 @@
 #
 # Reads Qwen Code hook input from stdin (JSON), maps it to the legacy
 # env-var contract that hook scripts expect
-# (CLAUDE_TOOL_NAME, CLAUDE_TOOL_INPUT, CLAUDE_OUTPUT, STOP_HOOK_MESSAGE),
+# (QWEN_TOOL_NAME, QWEN_TOOL_INPUT, QWEN_OUTPUT, STOP_HOOK_MESSAGE),
 # then invokes the appropriate hook script.
 #
 # Why this shim exists: Qwen Code passes hook data via stdin JSON;
@@ -48,20 +48,20 @@ if [[ -n "$STDIN_JSON" ]]; then
     done < <(printf '%s' "$STDIN_JSON" | jq -r '
         def emit($k; $v): if $v == null then empty else [$k, ($v | tostring)] | @tsv end;
 
-        emit("CLAUDE_SESSION_ID";    .session_id);
-        emit("CLAUDE_CWD";           .cwd);
-        emit("CLAUDE_TIMESTAMP";     .timestamp);
-        emit("CLAUDE_TOOL_NAME";     .tool_name);
-        emit("CLAUDE_TOOL_INPUT";    .tool_input);
-        emit("CLAUDE_TOOL_USE_ID";   .tool_use_id);
+        emit("QWEN_SESSION_ID";    .session_id);
+        emit("QWEN_CWD";           .cwd);
+        emit("QWEN_TIMESTAMP";     .timestamp);
+        emit("QWEN_TOOL_NAME";     .tool_name);
+        emit("QWEN_TOOL_INPUT";    .tool_input);
+        emit("QWEN_TOOL_USE_ID";   .tool_use_id);
         emit("STOP_HOOK_MESSAGE";    .last_assistant_message);
-        emit("CLAUDE_OUTPUT";        .last_assistant_message);
-        emit("CLAUDE_PERMISSION_MODE"; .permission_mode);
-        emit("CLAUDE_SESSION_SOURCE";  .source);
+        emit("QWEN_OUTPUT";        .last_assistant_message);
+        emit("QWEN_PERMISSION_MODE"; .permission_mode);
+        emit("QWEN_SESSION_SOURCE";  .source);
 
         if .notification_type then
-          emit("CLAUDE_TOOL_NAME";  "Notification");
-          ("CLAUDE_TOOL_INPUT=\( {type: .notification_type} | tostring )" | @tsv)
+          emit("QWEN_TOOL_NAME";  "Notification");
+          ("QWEN_TOOL_INPUT=\( {type: .notification_type} | tostring )" | @tsv)
         else empty end
     ')
   else
@@ -71,7 +71,7 @@ if [[ -n "$STDIN_JSON" ]]; then
       local key="$1"
       local value
       value=$(printf '%s' "$STDIN_JSON" | sed -n "s/.*\"$key\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p" | head -1)
-      [[ -n "$value" ]] && printf 'export %s=%q\n' "CLAUDE_${key^^}" "$value"
+      [[ -n "$value" ]] && printf 'export %s=%q\n' "QWEN_${key^^}" "$value"
     }
     emit_field session_id
     emit_field cwd
@@ -81,8 +81,8 @@ if [[ -n "$STDIN_JSON" ]]; then
     if [[ -n "$STDIN_JSON" ]] && grep -q '"notification_type"' <<< "$STDIN_JSON"; then
       local ntype
       ntype=$(printf '%s' "$STDIN_JSON" | sed -n 's/.*"notification_type"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
-      printf 'export CLAUDE_TOOL_NAME=%q\n' "Notification"
-      printf 'export CLAUDE_TOOL_INPUT=%q\n' "{\"type\":\"$ntype\"}"
+      printf 'export QWEN_TOOL_NAME=%q\n' "Notification"
+      printf 'export QWEN_TOOL_INPUT=%q\n' "{\"type\":\"$ntype\"}"
     fi
   fi
 fi

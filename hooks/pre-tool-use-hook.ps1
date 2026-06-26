@@ -16,8 +16,8 @@ Initialize-Hook "pre-tool-use"
 # CONFIGURATION
 # ============================================================================
 
-$ToolName = $env:CLAUDE_TOOL_NAME
-$ToolInput = $env:CLAUDE_TOOL_INPUT
+$ToolName = $env:QWEN_TOOL_NAME
+$ToolInput = $env:QWEN_TOOL_INPUT
 
 # ============================================================================
 # DANGEROUS COMMAND PATTERNS
