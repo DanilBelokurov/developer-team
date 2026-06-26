@@ -32,6 +32,7 @@ List all DevTeam commands with usage.
 |---|---|
 | `/devteam:review` | Cross-agent code review |
 | `/devteam:test` | Test coordination and execution |
+| `/devteam:describe-project` | Analyze the whole project → write `project-description.md` |
 | `/devteam:design` | Design system generation and validation |
 | `/devteam:design-drift` | Detect design system drift |
 
