@@ -84,6 +84,24 @@ fi
 log_info "target: ${TARGET}"
 
 # ============================================================================
+# RESOLVE DEVTEAM_DIR (must match install.sh logic)
+# ============================================================================
+# For project-level install, .devteam/ lives NEXT TO .qwen/ as a sibling —
+# i.e. <PROJECT>/.devteam, NOT <PROJECT>/.qwen/.devteam.
+# For user-level install, .devteam/ lives INSIDE .qwen/ as ~/.qwen/.devteam.
+# install.sh encodes this same rule; we mirror it here so uninstall removes
+# what install created.
+
+if [ -n "$PROJECT_PATH" ]; then
+    # Project-level: sibling layout. Realpath the user-supplied project path
+    # so symlinks are resolved consistently with install.sh.
+    DEVTEAM_TARGET="$(realpath "$PROJECT_PATH")/.devteam"
+else
+    # User-level: nested layout.
+    DEVTEAM_TARGET="${TARGET}/.devteam"
+fi
+
+# ============================================================================
 # REMOVE SENTINEL
 # ============================================================================
 
@@ -93,7 +111,7 @@ rm -f "$SENTINEL"
 log_info "removed ${SENTINEL}"
 
 # ============================================================================
-# REMOVE agents/, commands/, skills/, .devteam/
+# REMOVE agents/, commands/, skills/
 # ============================================================================
 
 echo ""
@@ -105,11 +123,15 @@ for dir in agents commands skills; do
     fi
 done
 
-# Remove .devteam/ (hooks, scripts, configs, state)
-DEVTEAM_TARGET="${TARGET}/.devteam"
+# ============================================================================
+# REMOVE .devteam/ (hooks, scripts, configs, state, mcp-servers/)
+# ============================================================================
+
 if [ -d "${DEVTEAM_TARGET}" ]; then
     rm -rf "${DEVTEAM_TARGET}"
     log_info "  removed ${DEVTEAM_TARGET}/"
+else
+    log_warn "  ${DEVTEAM_TARGET}/ not found — skipping"
 fi
 
 # ============================================================================
@@ -145,3 +167,21 @@ echo "  Target:   ${TARGET}"
 echo "  Sentinel: removed"
 echo "  Files:   removed"
 echo "  State:   removed"
+
+# ============================================================================
+# POST-UNINSTALL NOTES
+# ============================================================================
+
+if [ -n "$PROJECT_PATH" ]; then
+    # Project-level: everything was inside <PROJECT>/.devteam/ — already gone.
+    :
+else
+    # User-level: ~/mcp-servers/ lives outside ~/.qwen/ and is shared across
+    # projects, so we don't auto-remove it. Tell the user.
+    if [ -d "${HOME}/mcp-servers" ]; then
+        echo ""
+        log_warn "Note: ${HOME}/mcp-servers/ was NOT removed (shared across projects)"
+        log_warn "  To remove graphfocus venv and related artifacts:"
+        log_warn "    rm -rf ${HOME}/mcp-servers"
+    fi
+fi
