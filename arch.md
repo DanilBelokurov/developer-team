@@ -195,7 +195,6 @@ within each stage.
   "mcpServers": {
     "github": {...},
     "memory": {...},
-    "semgrep": {...},
     "cocoindex": {...}
   },
   "contextFileName": "QWEN.md",
@@ -208,7 +207,7 @@ within each stage.
 Fields:
 - `commands` / `skills` / `agents` — directories Qwen Code scans
 - `contextFileName` — file auto-loaded into system prompt
-- `mcpServers` — GitHub, memory, semgrep, and graphfocus MCP servers (optional)
+- `mcpServers` — GitHub, memory, and graphfocus MCP servers (optional)
 
 ### 4.2 Slash commands (`commands/devteam/<name>.md`)
 

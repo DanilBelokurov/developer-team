@@ -16,11 +16,6 @@
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-memory"]
     },
-    "semgrep": {
-      "type": "stdio",
-      "command": "semgrep",
-      "args": ["mcp"]
-    },
     "graphfocus": {
       "type": "stdio",
       "command": "graphfocus",
