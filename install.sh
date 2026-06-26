@@ -182,18 +182,31 @@ log_info "  .devteam/config/ — ${count_configs} config files"
 echo ""
 echo "Installing hooks into ${TARGET}/settings.json..."
 
-# Substitute __HOOK_BASE__ placeholder with absolute path
-# Use perl for cross-platform sed compatibility (macOS sed doesn't handle / in paths well)
-HOOK_CONFIG="$(perl -pe "s|__HOOK_BASE__|${DEVTEAM_TARGET}/hooks|g" "$CONFIG_FILE")"
+# Substitute __HOOK_BASE__ placeholder with absolute path.
+# Use perl for cross-platform sed compatibility (macOS sed doesn't handle / in paths well).
+# The replacement side of s/// in perl interpolates $ and @ as variables; a literal
+# `@` in the path would be silently consumed as an (undefined) array, stripping
+# everything from " @" onward. Escape \ and @ in the path before substituting.
+PERL_ESCAPED_TARGET="${DEVTEAM_TARGET//\\/\\\\}"
+PERL_ESCAPED_TARGET="${PERL_ESCAPED_TARGET//@/\\@}"
+HOOK_CONFIG="$(perl -pe 's|__HOOK_BASE__|'"${PERL_ESCAPED_TARGET}"'/hooks|g' "$CONFIG_FILE")"
 
 if [ ! -f "${TARGET}/settings.json" ]; then
     echo "$HOOK_CONFIG" > "${TARGET}/settings.json"
     log_info "created ${TARGET}/settings.json"
 else
+    # Guard against an existing-but-empty settings.json — jq emits nothing on
+    # empty input, which would corrupt the merged output. Treat whitespace-only
+    # content as empty as well.
+    EXISTING_CONFIG="$(cat "${TARGET}/settings.json" 2>/dev/null || true)"
+    if [ -z "$(printf '%s' "$EXISTING_CONFIG" | tr -d '[:space:]')" ]; then
+        EXISTING_CONFIG="{}"
+    fi
+
     tmp_file="$(mktemp)"
     trap "rm -f '$tmp_file'" EXIT
 
-    jq --argjson newcfg "$HOOK_CONFIG" '
+    jq -n --argjson newcfg "$HOOK_CONFIG" --argjson existing "$EXISTING_CONFIG" '
       def deep_merge($a; $b):
         if ($a | type) == "object" and ($b | type) == "object" then
           ($a | keys) as $akeys | ($b | keys) as $bkeys |
@@ -211,8 +224,8 @@ else
         else
           ($b // $a)
         end;
-      deep_merge(.; $newcfg)
-    ' "${TARGET}/settings.json" > "$tmp_file"
+      deep_merge($existing; $newcfg)
+    ' > "$tmp_file"
 
     mv "$tmp_file" "${TARGET}/settings.json"
     log_info "merged hooks into ${TARGET}/settings.json"

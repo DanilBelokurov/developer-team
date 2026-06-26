@@ -51,36 +51,32 @@ load_session_memory() {
 }
 
 # ============================================
-# LOAD CURRENT STATE
+# LOAD CURRENT STATE (file-based)
 # ============================================
 load_state_summary() {
-    if db_exists 2>/dev/null; then
-        log "Loading project state from database"
+    log "Loading project state from .devteam/state/"
 
-        # Extract key information from SQLite
-        local safe_session_id
-        safe_session_id=$(get_current_session 2>/dev/null || echo "")
-        safe_session_id="${safe_session_id//\'/\'\'}"
-        CURRENT_SPRINT=$(db_query "SELECT sprint_id FROM sessions WHERE id = '$safe_session_id';" 2>/dev/null || echo "none")
-        CURRENT_TASK=$(db_query "SELECT current_task_id FROM sessions WHERE id = '$safe_session_id';" 2>/dev/null || echo "none")
-        PHASE=$(db_query "SELECT current_phase FROM sessions WHERE id = '$safe_session_id';" 2>/dev/null || echo "unknown")
+    # Pull directly from the session markdown frontmatter via state.sh helpers.
+    # (Previous implementation queried a non-existent SQLite DB.)
+    CURRENT_SPRINT=$(get_kv_state active_sprint "" 2>/dev/null || echo "")
+    [[ -z "$CURRENT_SPRINT" ]] && CURRENT_SPRINT="none"
 
-        CURRENT_SPRINT="${CURRENT_SPRINT:-none}"
-        CURRENT_TASK="${CURRENT_TASK:-none}"
-        PHASE="${PHASE:-unknown}"
+    CURRENT_TASK=$(get_current_task 2>/dev/null || echo "")
+    [[ -z "$CURRENT_TASK" ]] && CURRENT_TASK="none"
 
-        output "## Current Project State"
+    PHASE=$(get_current_phase 2>/dev/null || echo "")
+    [[ -z "$PHASE" ]] && PHASE="unknown"
+
+    output "## Current Project State"
+    output ""
+    output "- **Current Sprint:** $CURRENT_SPRINT"
+    output "- **Current Task:** $CURRENT_TASK"
+    output "- **Phase:** $PHASE"
+    output ""
+
+    if [ -f ".devteam/autonomous-mode" ]; then
+        output "- **Mode:** Autonomous (running until complete)"
         output ""
-        output "- **Current Sprint:** $CURRENT_SPRINT"
-        output "- **Current Task:** $CURRENT_TASK"
-        output "- **Phase:** $PHASE"
-        output ""
-
-        # Check for autonomous mode
-        if [ -f ".devteam/autonomous-mode" ]; then
-            output "- **Mode:** Autonomous (running until complete)"
-            output ""
-        fi
     fi
 }
 

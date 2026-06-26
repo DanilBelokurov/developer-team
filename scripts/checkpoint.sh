@@ -432,6 +432,11 @@ auto_checkpoint() {
     log_info "Starting auto-checkpoint every ${interval} minutes"
     log_info "Press Ctrl+C to stop"
 
+    # L4 fix: trap SIGINT/SIGTERM so a backgrounded auto_checkpoint can be
+    # killed cleanly. Without this, the loop only exits via the bash default
+    # INT handler when run in foreground; backgrounded it would be unkillable.
+    trap 'log_info "auto_checkpoint: stopping on signal"; exit 0' INT TERM
+
     while true; do
         sleep "$((interval * 60))"
         create_checkpoint "${description} (auto)"

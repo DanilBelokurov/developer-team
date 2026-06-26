@@ -20,6 +20,28 @@ DEVTEAM_FEATURES_FILE="${DEVTEAM_DIR:-".devteam"}/features.json"
 # PROGRESS FILE GENERATION
 # ============================================================================
 
+# L9 fix: debounce generate_progress_summary. Each feature mutation used to
+# trigger a full progress regeneration (git log + 5 jq + session reads).
+# Now we only regenerate at most once every PROGRESS_DEBOUNCE_SECS, unless
+# PROGRESS_FORCE=1 is set.
+PROGRESS_DEBOUNCE_SECS="${PROGRESS_DEBOUNCE_SECS:-2}"
+PROGRESS_LAST_GENERATED_FILE="${DEVTEAM_DIR:-.devteam}/.progress-last-ts"
+
+_maybe_regenerate_progress() {
+    [[ "${PROGRESS_FORCE:-0}" == "1" ]] && { generate_progress_summary; return; }
+    local now last=0
+    now=$(date +%s)
+    [[ -f "$PROGRESS_LAST_GENERATED_FILE" ]] && last=$(cat "$PROGRESS_LAST_GENERATED_FILE" 2>/dev/null || echo 0)
+    if (( now - last >= PROGRESS_DEBOUNCE_SECS )); then
+        generate_progress_summary
+        echo "$now" > "$PROGRESS_LAST_GENERATED_FILE" 2>/dev/null || true
+    fi
+}
+
+# ============================================================================
+# PROGRESS FILE GENERATION (continued)
+# ============================================================================
+
 # Generate progress summary
 # Args: [session_id]
 generate_progress_summary() {
@@ -182,44 +204,27 @@ mark_feature_passing() {
     local timestamp
     timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-    # File locking to prevent race conditions
+    # File locking to prevent race conditions (H8/H9 fix)
+    # Reuse state.sh's acquire_lock: mkdir + brief retry (no busy-wait).
     local lock_dir="${DEVTEAM_FEATURES_FILE}.lock"
-    local lock_pid_file="${lock_dir}/pid"
-    # Clean stale locks: older than 10 seconds OR held by dead process
+    # Clean stale locks: held by a dead process.
     if [ -d "$lock_dir" ]; then
-        local lock_age
-        local lock_mtime
-        if [[ "$(uname)" == "Darwin" ]]; then
-            lock_mtime=$(stat -f %m "$lock_dir" 2>/dev/null || echo "0")
-        else
-            lock_mtime=$(stat -c %Y "$lock_dir" 2>/dev/null || echo "0")
-        fi
-        lock_age=$(( $(date +%s) - lock_mtime ))
-        local stale=false
-        if [ "$lock_age" -gt 10 ]; then
-            stale=true
-        elif [ -f "$lock_pid_file" ]; then
+        local lock_pid_file="${lock_dir}/pid"
+        if [ -f "$lock_pid_file" ]; then
             local lock_pid
             lock_pid=$(cat "$lock_pid_file" 2>/dev/null || echo "0")
             if [ "$lock_pid" != "0" ] && ! kill -0 "$lock_pid" 2>/dev/null; then
-                stale=true
+                rm -rf "$lock_dir" 2>/dev/null || true
             fi
         fi
-        if [ "$stale" = true ]; then
-            rm -rf "$lock_dir" 2>/dev/null || true
-        fi
     fi
-    local attempts=0
-    while ! mkdir "$lock_dir" 2>/dev/null; do
-        attempts=$((attempts + 1))
-        if [ "$attempts" -ge 50 ]; then
-            log_warn "Could not acquire lock after 50 attempts" "progress"
-            return 1
-        fi
-        sleep 0.1
-    done
-    echo $$ > "$lock_pid_file" 2>/dev/null || true
-    trap "rm -rf '$lock_dir' 2>/dev/null" RETURN
+    if ! acquire_lock "$lock_dir"; then
+        log_warn "Could not acquire features.json lock" "progress"
+        return 1
+    fi
+    echo $$ > "${lock_dir}/pid" 2>/dev/null || true
+    # Single robust trap (RETURN+ERR+INT+TERM) — fixes H9 leak.
+    trap "rm -rf '$lock_dir' 2>/dev/null; trap - RETURN ERR INT TERM" RETURN ERR INT TERM
 
     # Update the feature
     local tmp_file
@@ -241,8 +246,8 @@ mark_feature_passing() {
 
     log_info "Feature $feature_id marked as passing" "progress"
 
-    # Update progress file
-    generate_progress_summary
+    # Update progress file (debounced — L9 fix)
+    _maybe_regenerate_progress
 }
 
 # Mark a feature as failing
@@ -259,44 +264,24 @@ mark_feature_failing() {
     local timestamp
     timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-    # File locking to prevent race conditions
+    # File locking to prevent race conditions (H8/H9 fix)
     local lock_dir="${DEVTEAM_FEATURES_FILE}.lock"
-    local lock_pid_file="${lock_dir}/pid"
-    # Clean stale locks: older than 10 seconds OR held by dead process
     if [ -d "$lock_dir" ]; then
-        local lock_age
-        local lock_mtime
-        if [[ "$(uname)" == "Darwin" ]]; then
-            lock_mtime=$(stat -f %m "$lock_dir" 2>/dev/null || echo "0")
-        else
-            lock_mtime=$(stat -c %Y "$lock_dir" 2>/dev/null || echo "0")
-        fi
-        lock_age=$(( $(date +%s) - lock_mtime ))
-        local stale=false
-        if [ "$lock_age" -gt 10 ]; then
-            stale=true
-        elif [ -f "$lock_pid_file" ]; then
+        local lock_pid_file="${lock_dir}/pid"
+        if [ -f "$lock_pid_file" ]; then
             local lock_pid
             lock_pid=$(cat "$lock_pid_file" 2>/dev/null || echo "0")
             if [ "$lock_pid" != "0" ] && ! kill -0 "$lock_pid" 2>/dev/null; then
-                stale=true
+                rm -rf "$lock_dir" 2>/dev/null || true
             fi
         fi
-        if [ "$stale" = true ]; then
-            rm -rf "$lock_dir" 2>/dev/null || true
-        fi
     fi
-    local attempts=0
-    while ! mkdir "$lock_dir" 2>/dev/null; do
-        attempts=$((attempts + 1))
-        if [ "$attempts" -ge 50 ]; then
-            log_warn "Could not acquire lock after 50 attempts" "progress"
-            return 1
-        fi
-        sleep 0.1
-    done
-    echo $$ > "$lock_pid_file" 2>/dev/null || true
-    trap "rm -rf '$lock_dir' 2>/dev/null" RETURN
+    if ! acquire_lock "$lock_dir"; then
+        log_warn "Could not acquire features.json lock" "progress"
+        return 1
+    fi
+    echo $$ > "${lock_dir}/pid" 2>/dev/null || true
+    trap "rm -rf '$lock_dir' 2>/dev/null; trap - RETURN ERR INT TERM" RETURN ERR INT TERM
 
     local tmp_file
     tmp_file=$(safe_mktemp)

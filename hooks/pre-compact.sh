@@ -38,31 +38,31 @@ It preserves critical information that should not be lost.
 
 HEADER
 
-    # Add current task context from SQLite database
-    if db_exists 2>/dev/null; then
-        echo "## Current Execution State" >> "$COMPACT_FILE"
-        echo "" >> "$COMPACT_FILE"
+    # Add current task context from file-based state (no SQLite)
+    echo "## Current Execution State" >> "$COMPACT_FILE"
+    echo "" >> "$COMPACT_FILE"
 
-        # Extract and save current context from database
-        local db_sprint db_task db_phase safe_session_id
-        safe_session_id=$(get_current_session 2>/dev/null || echo "")
-        safe_session_id="${safe_session_id//\'/\'\'}"
-        db_sprint=$(db_query "SELECT sprint_id FROM sessions WHERE id = '$safe_session_id';" 2>/dev/null || echo "none")
-        db_task=$(db_query "SELECT current_task_id FROM sessions WHERE id = '$safe_session_id';" 2>/dev/null || echo "none")
-        db_phase=$(db_query "SELECT current_phase FROM sessions WHERE id = '$safe_session_id';" 2>/dev/null || echo "unknown")
+    local db_sprint db_task db_phase
+    db_sprint=$(get_kv_state active_sprint "" 2>/dev/null || echo "")
+    [[ -z "$db_sprint" ]] && db_sprint="none"
+    db_task=$(get_current_task 2>/dev/null || echo "")
+    [[ -z "$db_task" ]] && db_task="none"
+    db_phase=$(get_current_phase 2>/dev/null || echo "")
+    [[ -z "$db_phase" ]] && db_phase="unknown"
 
-        echo "- Sprint: ${db_sprint:-none}" >> "$COMPACT_FILE"
-        echo "- Task: ${db_task:-none}" >> "$COMPACT_FILE"
-        echo "- Phase: ${db_phase:-unknown}" >> "$COMPACT_FILE"
+    echo "- Sprint: ${db_sprint:-none}" >> "$COMPACT_FILE"
+    echo "- Task: ${db_task:-none}" >> "$COMPACT_FILE"
+    echo "- Phase: ${db_phase:-unknown}" >> "$COMPACT_FILE"
 
-        # Get current task details if in progress
-        CURRENT_TASK="${db_task:-}"
-        if [ -n "$CURRENT_TASK" ] && [ "$CURRENT_TASK" != "none" ]; then
-            local safe_task="${CURRENT_TASK//\'/\'\'}"
+    # If there's an active task, look up its status from the task markdown.
+    CURRENT_TASK="${db_task:-}"
+    if [ -n "$CURRENT_TASK" ] && [ "$CURRENT_TASK" != "none" ]; then
+        local task_file=".devteam/state/tasks/${CURRENT_TASK}.md"
+        if [[ -f "$task_file" ]]; then
             local task_status task_iteration task_tier
-            task_status=$(db_query "SELECT status FROM tasks WHERE id='$safe_task';" 2>/dev/null || echo "unknown")
-            task_iteration=$(db_query "SELECT actual_iterations FROM tasks WHERE id='$safe_task';" 2>/dev/null || echo "0")
-            task_tier=$(db_query "SELECT estimated_effort FROM tasks WHERE id='$safe_task';" 2>/dev/null || echo "unknown")
+            task_status=$(get_frontmatter_value "$task_file" "status")
+            task_iteration=$(get_frontmatter_value "$task_file" "iteration")
+            task_tier=$(get_frontmatter_value "$task_file" "tier")
 
             echo "" >> "$COMPACT_FILE"
             echo "### Current Task Details" >> "$COMPACT_FILE"
@@ -71,9 +71,9 @@ HEADER
             echo "- Iteration: ${task_iteration:-0}" >> "$COMPACT_FILE"
             echo "- Complexity Tier: ${task_tier:-unknown}" >> "$COMPACT_FILE"
         fi
-
-        echo "" >> "$COMPACT_FILE"
     fi
+
+    echo "" >> "$COMPACT_FILE"
 
     # Add autonomous mode status
     if [ -f ".devteam/autonomous-mode" ]; then
@@ -96,15 +96,15 @@ HEADER
 
 ## Important Reminders
 
-1. Full state is in `.devteam/devteam.db` (SQLite) - query it to understand progress
+1. Full state is in `.devteam/state/` (file-based) - read session/task markdown to understand progress
 2. Check task status before starting work
-3. Update database state after completing tasks
+3. Update state after completing tasks
 4. Output `EXIT_SIGNAL: true` only when ALL work is genuinely complete
 
 ## Recovery Instructions
 
 If resuming after compaction:
-1. Query `.devteam/devteam.db` to understand current state
+1. Read `.devteam/state/sessions/<id>.md` to understand current state
 2. Continue from the current task/sprint
 3. Do not restart completed work
 

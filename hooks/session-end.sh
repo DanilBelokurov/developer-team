@@ -26,31 +26,33 @@ log() {
 }
 
 # ============================================
-# EXTRACT STATE INFORMATION
+# EXTRACT STATE INFORMATION (file-based)
 # ============================================
 extract_state() {
-    if db_exists 2>/dev/null; then
-        local safe_session_id
-        safe_session_id=$(get_current_session 2>/dev/null || echo "")
-        safe_session_id="${safe_session_id//\'/\'\'}"
-        CURRENT_SPRINT=$(db_query "SELECT sprint_id FROM sessions WHERE id = '$safe_session_id';" 2>/dev/null || echo "unknown")
-        CURRENT_TASK=$(db_query "SELECT current_task_id FROM sessions WHERE id = '$safe_session_id';" 2>/dev/null || echo "unknown")
-        PHASE=$(db_query "SELECT current_phase FROM sessions WHERE id = '$safe_session_id';" 2>/dev/null || echo "unknown")
-        COMPLETED_TASKS=$(db_query "SELECT COUNT(*) FROM tasks WHERE status='completed';" 2>/dev/null || echo "0")
-        TOTAL_TASKS=$(db_query "SELECT COUNT(*) FROM tasks;" 2>/dev/null || echo "0")
+    CURRENT_SPRINT=$(get_kv_state active_sprint "" 2>/dev/null || echo "")
+    [[ -z "$CURRENT_SPRINT" ]] && CURRENT_SPRINT="unknown"
 
-        CURRENT_SPRINT="${CURRENT_SPRINT:-unknown}"
-        CURRENT_TASK="${CURRENT_TASK:-unknown}"
-        PHASE="${PHASE:-unknown}"
-        COMPLETED_TASKS="${COMPLETED_TASKS:-0}"
-        TOTAL_TASKS="${TOTAL_TASKS:-0}"
+    CURRENT_TASK=$(get_current_task 2>/dev/null || echo "")
+    [[ -z "$CURRENT_TASK" ]] && CURRENT_TASK="unknown"
+
+    PHASE=$(get_current_phase 2>/dev/null || echo "")
+    [[ -z "$PHASE" ]] && PHASE="unknown"
+
+    # Count tasks by scanning .devteam/state/tasks/*.md frontmatter status.
+    local tasks_dir=".devteam/state/tasks"
+    if [[ -d "$tasks_dir" ]]; then
+        TOTAL_TASKS=$(find "$tasks_dir" -maxdepth 1 -name '*.md' 2>/dev/null | wc -l | tr -d ' ')
+        COMPLETED_TASKS=$(awk -F': *' '
+            /^---$/ { fm = !fm; next }
+            fm && /^status:/ { v=$2; gsub(/[ \r\n]/,"",v); if (v=="completed") c++ }
+            END { print c+0 }
+        ' "$tasks_dir"/*.md 2>/dev/null)
     else
-        CURRENT_SPRINT="unknown"
-        CURRENT_TASK="unknown"
-        PHASE="unknown"
-        COMPLETED_TASKS="0"
-        TOTAL_TASKS="0"
+        TOTAL_TASKS=0
+        COMPLETED_TASKS=0
     fi
+    [[ -z "$COMPLETED_TASKS" ]] && COMPLETED_TASKS=0
+    [[ -z "$TOTAL_TASKS" ]] && TOTAL_TASKS=0
 }
 
 # ============================================

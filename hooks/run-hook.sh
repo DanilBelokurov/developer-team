@@ -1,17 +1,22 @@
 #!/bin/bash
-# DevTeam Qwen Code Hook Shim
+# DevTeam Qwen Code Hook Shim (v6.5 — no python3 dependency)
 #
 # Reads Qwen Code hook input from stdin (JSON), maps it to the legacy
-# env-var contract that the existing 9 hook scripts in hooks/*.sh expect
+# env-var contract that hook scripts expect
 # (CLAUDE_TOOL_NAME, CLAUDE_TOOL_INPUT, CLAUDE_OUTPUT, STOP_HOOK_MESSAGE),
-# then invokes the appropriate legacy hook script.
+# then invokes the appropriate hook script.
 #
 # Why this shim exists: Qwen Code passes hook data via stdin JSON;
-# the existing hooks/*.sh scripts were written for Claude Code's
-# env-var-based input. This shim bridges the two without rewriting
-# 9 scripts (~3000 lines of bash).
+# the hook scripts were written for Claude Code's env-var-based input.
+# This shim bridges the two without rewriting all hooks.
+#
+# H4 fix: the previous implementation spawned `python3` on every hook
+# invocation (~50-100 ms cold start, hundreds of calls per session). We
+# now use `jq` (already required elsewhere in the project) which starts
+# in ~5 ms. If jq is missing entirely, we fall back to a pure-bash
+# extractor that handles the small set of fields used by the hooks.
 
-set -euo pipefail
+set -uo pipefail
 
 HOOK_NAME="${1:-}"
 if [[ -z "$HOOK_NAME" ]]; then
@@ -32,47 +37,54 @@ if [[ ! -t 0 ]]; then
   STDIN_JSON="$(cat || true)"
 fi
 
-# 2. Map Qwen Code fields -> legacy env vars using python3.
-#    python3 handles edge cases (unicode, escapes) that grep/sed would mangle.
-if [[ -n "$STDIN_JSON" ]] && command -v python3 >/dev/null 2>&1; then
-  eval "$(python3 - "$STDIN_JSON" <<'PY'
-import json, sys, shlex
-try:
-    d = json.loads(sys.argv[1])
-except Exception:
-    sys.exit(0)
+if [[ -n "$STDIN_JSON" ]]; then
+  if command -v jq &>/dev/null; then
+    # H4 fix: jq is already required by hook-common.sh and install.sh,
+    # so it's safe to depend on it. Single invocation, sub-millisecond
+    # once warm — replaces ~50-100 ms of python3 startup per hook.
+    while IFS='=' read -r key value; do
+      [[ -z "$key" ]] && continue
+      printf 'export %s=%q\n' "$key" "$value"
+    done < <(printf '%s' "$STDIN_JSON" | jq -r '
+        def emit($k; $v): if $v == null then empty else [$k, ($v | tostring)] | @tsv end;
 
-def emit(k, v):
-    if v is None:
-        return
-    if isinstance(v, (dict, list)):
-        v = json.dumps(v, ensure_ascii=False)
-    print(f"export {k}={shlex.quote(str(v))}")
+        emit("CLAUDE_SESSION_ID";    .session_id);
+        emit("CLAUDE_CWD";           .cwd);
+        emit("CLAUDE_TIMESTAMP";     .timestamp);
+        emit("CLAUDE_TOOL_NAME";     .tool_name);
+        emit("CLAUDE_TOOL_INPUT";    .tool_input);
+        emit("CLAUDE_TOOL_USE_ID";   .tool_use_id);
+        emit("STOP_HOOK_MESSAGE";    .last_assistant_message);
+        emit("CLAUDE_OUTPUT";        .last_assistant_message);
+        emit("CLAUDE_PERMISSION_MODE"; .permission_mode);
+        emit("CLAUDE_SESSION_SOURCE";  .source);
 
-# Common
-emit("CLAUDE_SESSION_ID", d.get("session_id"))
-emit("CLAUDE_CWD", d.get("cwd"))
-emit("CLAUDE_TIMESTAMP", d.get("timestamp"))
-
-# Tool events (PreToolUse, PostToolUse, PostToolUseFailure, PermissionRequest)
-emit("CLAUDE_TOOL_NAME", d.get("tool_name"))
-emit("CLAUDE_TOOL_INPUT", d.get("tool_input"))
-emit("CLAUDE_TOOL_USE_ID", d.get("tool_use_id"))
-
-# Stop / SubagentStop
-emit("STOP_HOOK_MESSAGE", d.get("last_assistant_message"))
-emit("CLAUDE_OUTPUT", d.get("last_assistant_message"))
-
-# Notification: synthesize a tool_name for downstream scripts
-if d.get("notification_type"):
-    emit("CLAUDE_TOOL_NAME", "Notification")
-    emit("CLAUDE_TOOL_INPUT", json.dumps({"type": d["notification_type"]}))
-
-# Session
-emit("CLAUDE_PERMISSION_MODE", d.get("permission_mode"))
-emit("CLAUDE_SESSION_SOURCE", d.get("source"))
-PY
-)"
+        if .notification_type then
+          emit("CLAUDE_TOOL_NAME";  "Notification");
+          ("CLAUDE_TOOL_INPUT=\( {type: .notification_type} | tostring )" | @tsv)
+        else empty end
+    ')
+  else
+    # Pure-bash fallback: extract the few string fields the hooks use.
+    # Sufficient for the common case; not exhaustive JSON coverage.
+    emit_field() {
+      local key="$1"
+      local value
+      value=$(printf '%s' "$STDIN_JSON" | sed -n "s/.*\"$key\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p" | head -1)
+      [[ -n "$value" ]] && printf 'export %s=%q\n' "CLAUDE_${key^^}" "$value"
+    }
+    emit_field session_id
+    emit_field cwd
+    emit_field timestamp
+    emit_field tool_name
+    emit_field last_assistant_message
+    if [[ -n "$STDIN_JSON" ]] && grep -q '"notification_type"' <<< "$STDIN_JSON"; then
+      local ntype
+      ntype=$(printf '%s' "$STDIN_JSON" | sed -n 's/.*"notification_type"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+      printf 'export CLAUDE_TOOL_NAME=%q\n' "Notification"
+      printf 'export CLAUDE_TOOL_INPUT=%q\n' "{\"type\":\"$ntype\"}"
+    fi
+  fi
 fi
 
 # 3. Invoke the legacy hook

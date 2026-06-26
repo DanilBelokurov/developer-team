@@ -9,6 +9,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib/common.sh"
+# state.sh is sourced for shared lock primitives + session accessors.
+source "${SCRIPT_DIR}/state.sh"
 
 # ============================================================================
 # PATH CONSTANTS
@@ -62,89 +64,23 @@ validate_event_category() {
 }
 
 # ============================================================================
-# ATOMIC FILE HELPERS
+# ATOMIC FILE HELPERS (H8/H9 fix: delegated to state.sh)
 # ============================================================================
-
-_acquire_lock() {
-    local lockpath="$1"
-    local i=0
-    while ! mkdir "$lockpath" 2>/dev/null; do
-        i=$((i + 1))
-        if [ $i -gt 100 ]; then return 1; fi
-        sleep 0.01 2>/dev/null || true
-    done
-    return 0
-}
-
-_release_lock() {
-    rmdir "$1" 2>/dev/null || true
-}
+# events.sh uses state.sh's lock primitives — single mkdir + brief retry,
+# and traps cover RETURN/ERR/INT/TERM so we never leak lock dirs on error.
 
 _atomic_append() {
-    local file="$1"
-    local content="$2"
-    local lockpath="${file}.lock"
-    mkdir -p "$(dirname "$file")"
-    if ! _acquire_lock "$lockpath"; then
-        printf '%s\n' "$content" >> "$file"
-        return 0
-    fi
-    printf '%s\n' "$content" >> "$file"
-    _release_lock "$lockpath"
+    atomic_append "$1" "$2"
 }
 
 _atomic_write() {
-    local file="$1"
-    local content="$2"
-    local lockpath="${file}.lock"
-    mkdir -p "$(dirname "$file")"
-    if ! _acquire_lock "$lockpath"; then
-        printf '%s' "$content" > "$file"
-        return 0
-    fi
-    printf '%s' "$content" > "$file"
-    _release_lock "$lockpath"
+    atomic_write "$1" "$2"
 }
 
 # ============================================================================
-# SESSION ACCESSORS (delegated to state.sh)
+# SESSION ACCESSORS — provided by state.sh; no duplicates here.
+# (state.sh is sourced at the top of this file.)
 # ============================================================================
-
-get_current_session_id() {
-    if [[ ! -f "${STATE_DIR}/current-session.md" ]]; then echo ""; return; fi
-    local ref; ref=$(cat "${STATE_DIR}/current-session.md" 2>/dev/null)
-    [[ -z "$ref" ]] && return
-    [[ "$ref" == session/* ]] && echo "${ref#session/}" || echo ""
-}
-
-get_current_iteration() {
-    local session_id; session_id=$(get_current_session_id)
-    [[ -z "$session_id" ]] && echo "0" && return
-    local file="${STATE_DIR}/sessions/${session_id}.md"
-    if [[ ! -f "$file" ]]; then echo "0"; return; fi
-    awk '/^current_iteration:/ {sub(/^current_iteration: */,""); sub(/ *$/,""); print; exit}' "$file" 2>/dev/null || echo "0"
-}
-
-get_current_phase() {
-    local session_id; session_id=$(get_current_session_id)
-    [[ -z "$session_id" ]] && echo "" && return
-    local file="${STATE_DIR}/sessions/${session_id}.md"
-    if [[ ! -f "$file" ]]; then echo ""; return; fi
-    awk '/^current_phase:/ {sub(/^current_phase: */,""); sub(/ *$/,""); print; exit}' "$file" 2>/dev/null || echo ""
-}
-
-increment_failures() {
-    local session_id; session_id=$(get_current_session_id)
-    [[ -z "$session_id" ]] && return
-    local file="${STATE_DIR}/sessions/${session_id}.md"
-    if [[ ! -f "$file" ]]; then return; fi
-    local current; current=$(awk '/^consecutive_failures:/ {sub(/^consecutive_failures: */,""); sub(/ *$/,""); print; exit}' "$file" 2>/dev/null || echo "0")
-    local new=$((current + 1))
-    if grep -q "^consecutive_failures:" "$file"; then
-        sed -i.bak "s/^consecutive_failures:.*/consecutive_failures: ${new}/" "$file"
-        rm -f "${file}.bak"
-    fi
-}
 
 # ============================================================================
 # CORE EVENT LOGGING
@@ -584,9 +520,17 @@ get_recent_events() {
 
     local today; today=$(date +%Y-%m-%d)
     local events_file="${EVENTS_DIR}/${today}-events.md"
-    if [[ -f "$events_file" ]]; then
-        grep -A 10 "^## .*— " "$events_file" 2>/dev/null | head -$((limit * 10))
-    fi
+    [[ -f "$events_file" ]] || return 0
+
+    # L8 fix: use tail on the file (single block read) and filter for the
+    # current session, instead of grepping the entire daily log.
+    tail -n 5000 "$events_file" 2>/dev/null \
+        | awk -v sid="$session_id" '
+            /^## / { rec = $0; in_session = 0 }
+            /^- session_id: / { if ($0 ~ sid) in_session = 1; print rec; next }
+            in_session { print }
+        ' \
+        | tail -n $((limit * 12))
 }
 
 get_events_by_type() {

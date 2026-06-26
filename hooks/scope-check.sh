@@ -70,18 +70,9 @@ SENSITIVE_PATTERNS=(
 get_task_scope() {
     local task_id="$1"
 
-    # Try database first
-    if db_exists 2>/dev/null; then
-        local safe_task_id="${task_id//\'/\'\'}"
-        local scope
-        scope=$(db_query "SELECT scope_files FROM tasks WHERE id = '$safe_task_id';" 2>/dev/null || true)
-        if [[ -n "$scope" ]]; then
-            echo "$scope" | tr ',' '\n'
-            return
-        fi
-    fi
+    # H7 fix: no more SQLite fallback. Read scope only from the task JSON
+    # file under docs/planning/tasks/, docs/tasks/, or .devteam/tasks/.
 
-    # Try task file (JSON format)
     local task_file=""
     for dir in "docs/planning/tasks" "docs/tasks" ".devteam/tasks"; do
         if [[ -f "${DEVTEAM_ROOT:-$(pwd)}/${dir}/${task_id}.json" ]]; then
@@ -90,17 +81,22 @@ get_task_scope() {
         fi
     done
 
-    if [[ -z "$task_file" ]] || [[ ! -f "$task_file" ]]; then
-        return
+    [[ -z "$task_file" || ! -f "$task_file" ]] && return
+
+    if ! command -v jq &>/dev/null; then
+        return  # no jq → can't parse scope → caller treats as no-scope
     fi
 
-    # Parse JSON for scope using jq
-    if command -v jq &>/dev/null && [ -f "$task_file" ]; then
-        jq -r '.scope.allowed_files[]? // empty' "$task_file" | sed 's/^/+/'
-        jq -r '.scope.allowed_patterns[]? // empty' "$task_file" | sed 's/^/+/'
-        jq -r '.scope.forbidden_files[]? // empty' "$task_file" | sed 's/^/-/'
-        jq -r '.scope.forbidden_directories[]? // empty' "$task_file" | sed 's/^/!/'
-    fi
+    # H7 fix: combine all jq queries into a single invocation with a
+    # tagged union, so a malformed JSON file or one missing fields doesn't
+    # abort the script mid-way under `set -e`.
+    jq -r '
+        ([(.scope.allowed_files[]?          // empty) | "+" + .],
+         [(.scope.allowed_patterns[]?       // empty) | "+" + .],
+         [(.scope.forbidden_files[]?        // empty) | "-" + .],
+         [(.scope.forbidden_directories[]?  // empty) | "!" + .]
+        | .[]
+    ' "$task_file" 2>/dev/null
 }
 
 # ============================================================================

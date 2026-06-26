@@ -11,17 +11,16 @@
 #   ├── current-session.md          # active session pointer
 #   ├── sessions/<id>.md            # per-session MD with frontmatter
 #   ├── kv/<key>                    # one file per KV key
+#   ├── kv/<plan-id>/<key>           # plan-isolated KV
 #   ├── events/<date>-events.md     # append-only daily log
 #   ├── agent-runs/<run-id>.md      # per-agent-run MD
 #   ├── tasks/<TASK-ID>.md          # per-task MD
-#   ├── gates.md                    # quality gate log
-#   └── circuit-breaker.md          # circuit breaker state
+#   ├── circuit-breaker.md          # circuit breaker state
+#   └── abandonment/<session-id>.log # per-session abandonment log
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# Note: scripts/lib/common.sh is from v6.1 (SQLite-era) and requires bash 4+.
-# We don't source it here. v6.2 state.sh is self-contained (uses file ops).
 
 # ============================================================================
 # PATH CONSTANTS
@@ -35,61 +34,83 @@ KV_DIR="${STATE_DIR}/kv"
 EVENTS_DIR="${STATE_DIR}/events"
 TASKS_DIR="${STATE_DIR}/tasks"
 AGENT_RUNS_DIR="${STATE_DIR}/agent-runs"
+ABANDONMENT_DIR="${STATE_DIR}/abandonment"
 
 # Backward-compat: if a v6.1 .devteam/devteam.db exists, warn and offer migration
 LEGACY_DB="${ROOT}/.devteam/devteam.db"
 
 # ============================================================================
-# LOGGING (kept from common.sh; re-defined here for self-containment)
+# LOGGING (stderr only; stdout reserved for return values)
 # ============================================================================
 
-# Logging — all to stderr so stdout is reserved for function return values
 log_info()  { echo "[devteam] $1" >&2; }
 log_warn()  { echo "[devteam] $1" >&2; }
 log_error() { echo "[devteam] $1" >&2; }
 log_debug() { [[ -n "${DEBUG:-}" ]] && echo "[devteam:debug] $1" >&2 || true; }
 
 # ============================================================================
-# ATOMIC FILE OPS (mkdir-lock based, POSIX-portable)
+# LOCK PRIMITIVES (H8/H9 fix)
 # ============================================================================
+# POSIX mkdir is atomic. We don't busy-wait with 100 polls + sleep 0.01;
+# we try once, sleep one short interval if needed, and bail out fast.
+# Trap is set once at the top with ERR+RETURN+INT+TERM so the lock is
+# released on every exit path, including set -e errors.
 
-# Try to acquire a lock by mkdir-ing a sidecar directory. mkdir is atomic
-# on POSIX (returns EEXIST if dir exists). If acquisition fails after
-# 100 attempts (~1s), log error and return 1.
-# Args: lockpath (e.g. /path/to/file.lock)
+# Try to acquire a lock by mkdir-ing a sidecar directory.
+# Returns 0 on success, 1 on timeout. NEVER blocks more than ~50ms.
 acquire_lock() {
     local lockpath="$1"
-    local i=0
-    while ! mkdir "$lockpath" 2>/dev/null; do
-        i=$((i + 1))
-        if [ $i -gt 100 ]; then
-            log_error "Lock timeout: $lockpath"
-            return 1
-        fi
-        sleep 0.01 2>/dev/null || true
-    done
+    if mkdir "$lockpath" 2>/dev/null; then
+        return 0
+    fi
+    # Brief retry: a sibling caller might be holding it for milliseconds.
+    # Two attempts × sleep 0.05s max → 100ms worst case, not 1 second.
+    sleep 0.05 2>/dev/null || true
+    if mkdir "$lockpath" 2>/dev/null; then
+        return 0
+    fi
+    log_error "Lock busy: $lockpath (held by another process)"
+    return 1
 }
 
 # Release lock by rmdir-ing the sidecar directory.
-# Args: lockpath
 release_lock() {
     rmdir "$1" 2>/dev/null || true
 }
 
-# Write content to file atomically. Uses mkdir-based lock + atomic rename.
-# Args: file, content
+# Internal: perform an action under a lock with a robust trap.
+# Args: lockpath, callback-name, [args...]
+_with_lock() {
+    local lockpath="$1"
+    local callback="$2"
+    shift 2
+
+    acquire_lock "$lockpath" || return 1
+
+    # Trap covers normal RETURN, errors (ERR), and signals (INT/TERM).
+    # The trap release_lock then removes itself so callers further up
+    # the stack don't accidentally release a lock they don't own.
+    trap "release_lock '$lockpath'; trap - RETURN ERR INT TERM" RETURN ERR INT TERM
+
+    "$callback" "$@"
+    local rc=$?
+
+    trap - RETURN ERR INT TERM
+    release_lock "$lockpath"
+    return $rc
+}
+
+# ============================================================================
+# ATOMIC FILE OPS
+# ============================================================================
+
+# Write content to file atomically. Args: file, content
 atomic_write() {
     local file="$1"
     local content="$2"
-    local lockpath="${file}.lock"
-
-    acquire_lock "$lockpath" || return 1
-    trap "release_lock '$lockpath'" RETURN
     mkdir -p "$(dirname "$file")"
     printf '%s' "$content" > "${file}.tmp"
     mv "${file}.tmp" "$file"
-    release_lock "$lockpath"
-    trap - RETURN
 }
 
 # Append to file atomically. Args: file, content
@@ -97,13 +118,14 @@ atomic_append() {
     local file="$1"
     local content="$2"
     local lockpath="${file}.lock"
-
-    acquire_lock "$lockpath" || return 1
-    trap "release_lock '$lockpath'" RETURN
     mkdir -p "$(dirname "$file")"
-    printf '%s\n' "$content" >> "$file"
-    release_lock "$lockpath"
-    trap - RETURN
+
+    _with_lock "$lockpath" _do_atomic_append "$content" "$file"
+}
+
+_do_atomic_append() {
+    # Args: content, file
+    printf '%s\n' "$1" >> "$2"
 }
 
 # Read frontmatter value from MD file. Args: file, key
@@ -111,7 +133,6 @@ get_frontmatter_value() {
     local file="$1"
     local key="$2"
     [[ ! -f "$file" ]] && return 1
-    # YAML frontmatter is between first --- and second ---
     awk -v key="^${key}:" '
         /^---$/ { c++; next }
         c == 1 && $0 ~ key { sub(key, ""); sub(/^[ \t]+/, ""); print; exit }
@@ -126,22 +147,25 @@ set_frontmatter_value() {
     [[ ! -f "$file" ]] && return 1
 
     local lockpath="${file}.lock"
-    acquire_lock "$lockpath" || return 1
-    trap "release_lock '$lockpath'" RETURN
-    # Replace the line in-place; preserve other lines
+    _with_lock "$lockpath" _do_set_frontmatter_value "$file" "$key" "$value"
+}
+
+_do_set_frontmatter_value() {
+    local file="$1"
+    local key="$2"
+    local value="$3"
     if grep -q "^${key}:" "$file"; then
-        sed -i.bak "s|^${key}:.*|${key}: ${value}|" "$file"
-        rm -f "${file}.bak"
+        # macOS sed -i requires -i '' ; on Linux '' is not accepted.
+        # Use a tmp file + mv to be portable.
+        sed "s|^${key}:.*|${key}: ${value}|" "$file" > "${file}.tmp"
+        mv "${file}.tmp" "$file"
     else
-        # Insert after the second --- (end of frontmatter)
         awk -v key="$key" -v val="$value" '
             /^---$/ { c++; if (c == 2) { print key": "val; } print; next }
             { print }
         ' "$file" > "${file}.tmp"
         mv "${file}.tmp" "$file"
     fi
-    release_lock "$lockpath"
-    trap - RETURN
 }
 
 # ============================================================================
@@ -154,12 +178,11 @@ ensure_state_dir() {
     [[ -d "$EVENTS_DIR" ]]   || mkdir -p "$EVENTS_DIR"
     [[ -d "$TASKS_DIR" ]]    || mkdir -p "$TASKS_DIR"
     [[ -d "$AGENT_RUNS_DIR" ]] || mkdir -p "$AGENT_RUNS_DIR"
+    [[ -d "$ABANDONMENT_DIR" ]] || mkdir -p "$ABANDONMENT_DIR"
 
-    # Touch current-session.md if missing
     [[ -f "${STATE_DIR}/current-session.md" ]] || \
         atomic_write "${STATE_DIR}/current-session.md" ""
 
-    # Initialize circuit-breaker if missing
     [[ -f "${STATE_DIR}/circuit-breaker.md" ]] || atomic_write "${STATE_DIR}/circuit-breaker.md" "$(cat <<'EOF'
 ---
 state: closed
@@ -173,42 +196,41 @@ half_open_at: ~
 EOF
 )"
 
-    # Initialize gates.md if missing
     [[ -f "${STATE_DIR}/gates.md" ]] || atomic_write "${STATE_DIR}/gates.md" "# Quality Gates"$(printf '\n')
 
-    # Touch today's events file
     local today
     today=$(date +%Y-%m-%d)
     local events_file="${EVENTS_DIR}/${today}-events.md"
     [[ -f "$events_file" ]] || atomic_write "$events_file" "# Events ${today}"$(printf '\n')
 }
 
-# Warn about legacy v6.1 SQLite DB if present
 warn_legacy_db() {
     [[ -f "$LEGACY_DB" ]] || return 0
-    log_warn "Legacy SQLite DB found: $LEGACY_DB"
-    log_warn "DevTeam v6.2 uses file-based state at $STATE_DIR/"
-    log_warn "Migrate with: bash scripts/state-migrate-v61-to-v62.sh"
+    log_warn "Legacy SQLite DB found: $LEGACY_DB (devteam v6.2 is file-based — see scripts/state-migrate-v61-to-v62.sh)"
 }
 
 # ============================================================================
 # SESSION MANAGEMENT
 # ============================================================================
 
-# Generate a unique session ID
 generate_session_id() {
     local ts rand
     ts=$(date +%Y%m%d-%H%M%S)
-    rand=$(head -c4 /dev/urandom | xxd -p 2>/dev/null || echo "$RANDOM")
+    if command -v xxd &>/dev/null; then
+        rand=$(head -c4 /dev/urandom | xxd -p 2>/dev/null)
+    else
+        rand=$(head -c4 /dev/urandom | od -An -tx1 | tr -d ' \n')
+    fi
     echo "session-${ts}-${rand}"
 }
 
 # Start a new session
-# Args: command, command_type, [execution_mode]
+# Args: command, command_type, [execution_mode], [max_iterations]
 start_session() {
     local command="$1"
     local command_type="$2"
     local execution_mode="${3:-normal}"
+    local max_iterations="${4:-${DEVTEAM_MAX_ITERATIONS:-100}}"
 
     if [[ -z "$command" ]]; then
         log_error "Command cannot be empty"
@@ -233,11 +255,15 @@ command: ${command}
 command_type: ${command_type}
 status: running
 current_phase: initializing
+current_agent: ~
+current_model: sonnet
 current_iteration: 0
-max_iterations: 10
+current_task_id: ~
+sprint_id: ~
 consecutive_failures: 0
 circuit_breaker_state: closed
 execution_mode: ${execution_mode}
+max_iterations: ${max_iterations}
 total_tokens_input: 0
 total_tokens_output: 0
 total_cost_cents: 0
@@ -262,8 +288,6 @@ EOF
     echo "$session_id"
 }
 
-# End the current session
-# Args: [status], [exit_reason]
 end_session() {
     local status="${1:-completed}"
     local exit_reason="${2:-Success}"
@@ -287,7 +311,6 @@ end_session() {
     log_info "Session ended: $session_id ($status)"
 }
 
-# Get current session ID
 get_current_session_id() {
     [[ ! -f "${STATE_DIR}/current-session.md" ]] && return 0
     local ref
@@ -296,7 +319,6 @@ get_current_session_id() {
     [[ "$ref" == session/* ]] && echo "${ref#session/}" || echo ""
 }
 
-# Check if session is running
 is_session_running() {
     local id
     id=$(get_current_session_id)
@@ -308,13 +330,11 @@ is_session_running() {
     [[ "$status" == "running" ]]
 }
 
-# Render session as JSON (backward-compat with v6.1 callers that parse JSON)
 get_session_json() {
     local id="${1:-$(get_current_session_id)}"
     local file="${SESSIONS_DIR}/${id}.md"
     [[ ! -f "$file" ]] && return 1
 
-    # Build JSON from frontmatter
     local id_v started_at ended_at command command_type status phase iter fails cb mode tokens_in tokens_out cost
     id_v=$(get_frontmatter_value "$file" "id")
     started_at=$(get_frontmatter_value "$file" "started_at")
@@ -337,12 +357,10 @@ EOF
 }
 
 # ============================================================================
-# KV STATE (backward-compat names: set_kv_state, get_kv_state)
+# KV STATE
 # ============================================================================
 
-# Set a key-value pair
-# Args: key, value, [plan_id]
-# If plan_id is provided, stores in KV_DIR/<plan_id>/<key> for isolation
+# Set a key-value pair. Args: key, value, [plan_id]
 set_kv_state() {
     local key="$1"
     local value="$2"
@@ -351,18 +369,14 @@ set_kv_state() {
     ensure_state_dir
 
     if [[ -n "$plan_id" ]]; then
-        # Plan-isolated storage: KV_DIR/<plan_id>/<key>
         mkdir -p "${KV_DIR}/${plan_id}"
         atomic_write "${KV_DIR}/${plan_id}/${key}" "$value"
     else
-        # Global storage: KV_DIR/<key>
         atomic_write "${KV_DIR}/${key}" "$value"
     fi
 }
 
-# Get a key-value pair
-# Args: key, [default], [plan_id]
-# If plan_id is provided, reads from KV_DIR/<plan_id>/<key>
+# Get a key-value pair. Args: key, [default], [plan_id]
 get_kv_state() {
     local key="$1"
     local default="${2:-}"
@@ -377,12 +391,9 @@ get_kv_state() {
     [[ -n "$val" ]] && echo "$val" || echo "$default"
 }
 
-# Delete a key-value pair
-# Args: key, [plan_id]
 delete_kv_state() {
     local key="$1"
     local plan_id="${2:-}"
-
     if [[ -n "$plan_id" ]]; then
         rm -f "${KV_DIR}/${plan_id}/${key}" 2>/dev/null
     else
@@ -391,11 +402,9 @@ delete_kv_state() {
 }
 
 # ============================================================================
-# STATE GETTERS/SETTERS (backward-compat with v6.1)
-# These read/write frontmatter of the current session file.
+# STATE GETTERS/SETTERS
 # ============================================================================
 
-# Generic set: field, value, [session_id]
 set_state() {
     local field="$1"
     local value="$2"
@@ -412,7 +421,6 @@ set_state() {
     set_frontmatter_value "$file" "$field" "$value"
 }
 
-# Generic get: field, [default]
 get_state() {
     local field="$1"
     local default="${2:-}"
@@ -427,36 +435,22 @@ get_state() {
 }
 
 # Convenience accessors
-get_current_phase()      { get_state "current_phase"; }
-get_current_agent()      { get_state "current_agent"; }
-get_current_model()      { get_state "current_model"; }
+get_current_phase()       { get_state "current_phase"; }
+get_current_agent()       { get_state "current_agent"; }
+get_current_model()       { get_state "current_model" "sonnet"; }
 get_current_iteration()   { get_state "current_iteration" "0"; }
+get_current_task()        { get_state "current_task_id"; }
 get_consecutive_failures(){ get_state "consecutive_failures" "0"; }
 get_execution_mode()      { get_state "execution_mode" "normal"; }
 
-is_eco_mode() {
-    [[ "$(get_execution_mode)" == "eco" ]]
-}
+is_eco_mode() { [[ "$(get_execution_mode)" == "eco" ]]; }
 
-is_bug_council_active() {
-    [[ "$(get_state bug_council_activated)" == "TRUE" ]]
-}
+is_bug_council_active() { [[ "$(get_state bug_council_activated)" == "TRUE" ]]; }
 
-set_phase() {
-    local phase="$1"
-    set_state "current_phase" "$phase"
-}
-
-set_current_agent() {
-    local agent="$1"
-    [[ -z "$agent" ]] && { log_error "Agent name cannot be empty"; return 1; }
-    set_state "current_agent" "$agent"
-}
-
-set_current_model() {
-    local model="$1"
-    set_state "current_model" "$model"
-}
+set_phase() { set_state "current_phase" "$1"; }
+set_current_agent() { [[ -z "$1" ]] && { log_error "Agent name cannot be empty"; return 1; }; set_state "current_agent" "$1"; }
+set_current_model() { set_state "current_model" "$1"; }
+set_current_task()  { set_state "current_task_id" "$1"; }
 
 # ============================================================================
 # ITERATION TRACKING
@@ -487,10 +481,10 @@ reset_failures() {
 # CIRCUIT BREAKER
 # ============================================================================
 
-# Read circuit breaker state from state/circuit-breaker.md
 get_circuit_breaker_state() {
-    cat "${STATE_DIR}/circuit-breaker.md" 2>/dev/null | \
-        awk '/^state:/ {sub(/^state: */, ""); sub(/ *$/, ""); print; exit}'
+    [[ ! -f "${STATE_DIR}/circuit-breaker.md" ]] && { echo "closed"; return; }
+    awk '/^state:/ {sub(/^state: */, ""); sub(/ *$/, ""); print; exit}' \
+        "${STATE_DIR}/circuit-breaker.md" 2>/dev/null || echo "closed"
 }
 
 set_circuit_breaker_state() {
@@ -498,26 +492,34 @@ set_circuit_breaker_state() {
     local now
     now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
     local file="${STATE_DIR}/circuit-breaker.md"
+    [[ ! -f "$file" ]] && return 1
+
     local lockpath="${file}.lock"
-    acquire_lock "$lockpath" || return 1
-    trap "release_lock '$lockpath'" RETURN
-    if grep -q "^state:" "$file"; then
-        sed -i.bak "s|^state:.*|state: ${new_state}|" "$file"
-        rm -f "${file}.bak"
-    fi
+    _with_lock "$lockpath" _do_set_cb_state "$file" "$new_state" "$now"
+}
+
+_do_set_cb_state() {
+    local file="$1"
+    local new_state="$2"
+    local now="$3"
+
+    sed "s|^state:.*|state: ${new_state}|" "$file" > "${file}.tmp"
+    mv "${file}.tmp" "$file"
+
     if [[ "$new_state" == "open" ]]; then
-        if ! grep -q "^opened_at:" "$file"; then
-            sed -i.bak "/^---$/a opened_at: ~" "$file"
-            rm -f "${file}.bak"
+        if grep -q "^opened_at:" "$file"; then
+            sed "s|^opened_at:.*|opened_at: ${now}|" "$file" > "${file}.tmp"
+        else
+            awk -v ts="$now" '/^---$/{c++; if(c==2){print "opened_at: "ts} print; next} {print}' \
+                "$file" > "${file}.tmp"
         fi
-        sed -i.bak "s|^opened_at:.*|opened_at: ${now}|" "$file"
-        rm -f "${file}.bak"
+        mv "${file}.tmp" "$file"
     elif [[ "$new_state" == "half-open" ]]; then
-        sed -i.bak "s|^half_open_at:.*|half_open_at: ${now}|" "$file"
-        rm -f "${file}.bak"
+        if grep -q "^half_open_at:" "$file"; then
+            sed "s|^half_open_at:.*|half_open_at: ${now}|" "$file" > "${file}.tmp"
+            mv "${file}.tmp" "$file"
+        fi
     fi
-    release_lock "$lockpath"
-    trap - RETURN
 }
 
 should_trip_circuit_breaker() {
@@ -543,7 +545,6 @@ reset_circuit_breaker() {
 # MODEL ESCALATION
 # ============================================================================
 
-# Tier order: haiku < sonnet < opus
 MODEL_TIERS=("haiku" "sonnet" "opus")
 
 get_next_model() {
@@ -555,12 +556,12 @@ get_next_model() {
             if [[ $next_idx -lt ${#MODEL_TIERS[@]} ]]; then
                 echo "${MODEL_TIERS[$next_idx]}"
             else
-                echo "opus"  # Already at top
+                echo "opus"
             fi
             return
         fi
     done
-    echo "sonnet"  # Default fallback
+    echo "sonnet"
 }
 
 get_previous_model() {
@@ -639,9 +640,8 @@ add_tokens() {
     set_state "total_tokens_input" "$((current_in + input))"
     set_state "total_tokens_output" "$((current_out + output))"
 
-    # Compute cost (rough estimates; configurable in config.yaml)
-    local input_rate="${INPUT_TOKEN_RATE_CENTS:-3}"   # $0.003 per 1k tokens
-    local output_rate="${OUTPUT_TOKEN_RATE_CENTS:-15}"  # $0.015 per 1k tokens
+    local input_rate="${INPUT_TOKEN_RATE_CENTS:-3}"
+    local output_rate="${OUTPUT_TOKEN_RATE_CENTS:-15}"
     local cost=$(( input * input_rate / 1000 + output * output_rate / 1000 ))
 
     local current_cost
@@ -672,7 +672,7 @@ set_active_sprint() {
 }
 
 # ============================================================================
-# SESSION SUMMARY (read-only aggregations)
+# SESSION SUMMARY
 # ============================================================================
 
 get_session_summary() {
@@ -689,40 +689,41 @@ Iteration:    $(get_frontmatter_value "$file" "current_iteration")
 Failures:     $(get_frontmatter_value "$file" "consecutive_failures")
 Model:        $(get_frontmatter_value "$file" "current_model")
 Started:      $(get_frontmatter_value "$file" "started_at")
-Tokens in:   $(get_frontmatter_value "$file" "total_tokens_input")
-Tokens out:  $(get_frontmatter_value "$file" "total_tokens_output")
+Tokens in:    $(get_frontmatter_value "$file" "total_tokens_input")
+Tokens out:   $(get_frontmatter_value "$file" "total_tokens_output")
 Cost (cents): $(get_frontmatter_value "$file" "total_cost_cents")
 Cost (\$):    $(get_total_cost_dollars)
 EOF
 }
 
-# Aggregate model usage from agent-runs/ files
-get_model_usage() {
-    local usage_file="${STATE_DIR}/model-usage.txt"
-    > "$usage_file"  # truncate
+# ============================================================================
+# ABANDONMENT TRACKING (M4 fix: per-session, not global)
+# ============================================================================
 
-    if [[ -d "$AGENT_RUNS_DIR" ]]; then
-        for f in "$AGENT_RUNS_DIR"/*.md; do
-            [[ -f "$f" ]] || continue
-            local model
-            model=$(get_frontmatter_value "$f" "model")
-            local cost
-            cost=$(get_frontmatter_value "$f" "cost_cents")
-            echo "$model $cost" >> "$usage_file"
-        done
-    fi
-
-    awk '{ usage[$1] += $2 } END { for (m in usage) printf "%-10s %d cents\n", m, usage[m] }' "$usage_file"
+# Append an abandonment attempt to the per-session log.
+# Args: detection_type, pattern
+log_abandonment_attempt() {
+    local detection_type="$1"
+    local pattern="$2"
+    local session_id
+    session_id=$(get_current_session_id)
+    [[ -z "$session_id" ]] && return 1
+    local log_file="${ABANDONMENT_DIR}/${session_id}.log"
+    local now
+    now=$(date -Iseconds)
+    atomic_append "$log_file" "[${now}] ${detection_type}: '${pattern}'"
 }
 
-# ============================================================================
-# SESSION ABORT
-# ============================================================================
-
-abort_session() {
-    local reason="${1:-user_abort}"
-    end_session "aborted" "$reason"
-    log_info "Session aborted: $reason"
+# Count abandonment attempts in the CURRENT session only (not global).
+# This replaces the old `wc -l < abandonment-attempts.log` which leaked
+# across sessions.
+count_session_abandonment_attempts() {
+    local session_id
+    session_id=$(get_current_session_id)
+    [[ -z "$session_id" ]] && { echo "0"; return; }
+    local log_file="${ABANDONMENT_DIR}/${session_id}.log"
+    [[ -f "$log_file" ]] || { echo "0"; return; }
+    wc -l < "$log_file" 2>/dev/null | tr -d ' ' || echo "0"
 }
 
 # ============================================================================
@@ -733,6 +734,6 @@ is_max_iterations_reached() {
     local current
     current=$(get_current_iteration)
     local max
-    max=$(get_state "max_iterations" "10")
+    max=$(get_state "max_iterations" "${DEVTEAM_MAX_ITERATIONS:-100}")
     [[ "$current" -ge "$max" ]]
 }

@@ -25,6 +25,7 @@ else
 fi
 
 init_hook "post-tool-use"
+prime_hot_cache
 
 # ============================================================================
 # CONFIGURATION
@@ -196,6 +197,7 @@ handle_failure() {
 
     # Increment failure counter
     increment_failures
+    cache_set failures ""
 
     local failures
     failures=$(get_consecutive_failures)
@@ -204,9 +206,12 @@ handle_failure() {
 
     log_warn "post-tool-use" "Failure detected (consecutive: $failures)"
 
-    # Extract and store error summary
+    # M2 fix: cap the result size before grepping — large compiler output
+    # (e.g. thousands of tsc errors) used to write the entire result to
+    # disk via head -20 pipe. Now we read at most 100KB.
     local errors_file="$DEVTEAM_DIR/last-errors.txt"
-    echo "$result" | grep -iE "(error|fail|exception|assert)" | head -20 > "$errors_file" 2>/dev/null || true
+    printf '%s' "$result" | head -c 100000 \
+        | grep -iE "(error|fail|exception|assert)" | head -20 > "$errors_file" 2>/dev/null || true
 
     # Determine escalation threshold
     local threshold=2
