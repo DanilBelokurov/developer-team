@@ -54,11 +54,29 @@ if [[ -n "$STDIN_JSON" ]]; then
     # H7 fix: parse each `key=value` line and `export` the variable in
     # the current shell. The old `printf 'export %s=%q\n' ...` printed
     # assignments to stdout, which Qwen Code surfaced to the user.
+    #
+    # H8 fix: agent messages are often multi-line (markdown with `##`
+    # headers, bullet lists, code fences). `read` splits on real `\n`,
+    # so subsequent lines of the message arrive as `KEY` with no `=`
+    # and either a) `## Sections` (invalid identifier, bash prints
+    # `export: '## Sections=...': not a valid identifier` to stderr),
+    # or b) a string that looks like a flag (`-foo`) and trips bash's
+    # option parser. Either way the user sees a wall of bash errors
+    # in the chat that look like the old `export …` leak. Guard with
+    # a strict POSIX-identifier check on `key` so the trailing chunks
+    # are silently dropped and the chat stays clean.
     while IFS= read -r line; do
+      # Tolerate CRLF inputs (Windows-style line endings).
+      line="${line%$'\r'}"
       [[ -z "$line" ]] && continue
       key="${line%%=*}"
       value="${line#*=}"
-      [[ -z "$key" ]] && continue
+      # Only accept strict POSIX identifiers as the key. This rejects
+      # `## Sections`, `- bullet`, `* item`, `. stray`, code fences,
+      # and any other artifact from a split multi-line message value.
+      if ! [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+        continue
+      fi
       export "$key=$value"
     done < <(printf '%s' "$STDIN_JSON" | jq -r '
         def emit($k; $v): if $v == null then empty else "\($k)=\($v|tostring)" end;
