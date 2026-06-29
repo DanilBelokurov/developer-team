@@ -1,5 +1,5 @@
 #!/bin/bash
-# DevTeam Qwen Code Hook Shim (v6.5 — no python3 dependency)
+# DevTeam Qwen Code Hook Shim (v6.6 — env vars exported in-shell)
 #
 # Reads Qwen Code hook input from stdin (JSON), maps it to the legacy
 # env-var contract that hook scripts expect
@@ -15,6 +15,14 @@
 # now use `jq` (already required elsewhere in the project) which starts
 # in ~5 ms. If jq is missing entirely, we fall back to a pure-bash
 # extractor that handles the small set of fields used by the hooks.
+#
+# H7 fix: the previous implementation printed `export KEY=VALUE` lines
+# to stdout (assumed the parent would `eval` them). Qwen Code runs the
+# hook command directly and surfaces its stdout to the user, which
+# produced 10+ "export ..." lines per invocation — most visible after
+# commands like `/devteam:describe-project`. We now `export` each
+# variable in the current shell before `exec`-ing the hook script, so
+# no output is emitted and the hook inherits the env cleanly.
 
 set -uo pipefail
 
@@ -42,9 +50,16 @@ if [[ -n "$STDIN_JSON" ]]; then
     # H4 fix: jq is already required by hook-common.sh and install.sh,
     # so it's safe to depend on it. Single invocation, sub-millisecond
     # once warm — replaces ~50-100 ms of python3 startup per hook.
-    while IFS='=' read -r key value; do
+    #
+    # H7 fix: parse each `key=value` line and `export` the variable in
+    # the current shell. The old `printf 'export %s=%q\n' ...` printed
+    # assignments to stdout, which Qwen Code surfaced to the user.
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      key="${line%%=*}"
+      value="${line#*=}"
       [[ -z "$key" ]] && continue
-      printf 'export %s=%q\n' "$key" "$value"
+      export "$key=$value"
     done < <(printf '%s' "$STDIN_JSON" | jq -r '
         def emit($k; $v): if $v == null then empty else "\($k)=\($v|tostring)" end;
 
@@ -67,11 +82,12 @@ if [[ -n "$STDIN_JSON" ]]; then
   else
     # Pure-bash fallback: extract the few string fields the hooks use.
     # Sufficient for the common case; not exhaustive JSON coverage.
+    # H7 fix: write to env directly instead of printing `export` lines.
     emit_field() {
       local key="$1"
       local value
       value=$(printf '%s' "$STDIN_JSON" | sed -n "s/.*\"$key\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p" | head -1)
-      [[ -n "$value" ]] && printf 'export %s=%q\n' "QWEN_${key^^}" "$value"
+      [[ -n "$value" ]] && export "QWEN_${key^^}=$value"
     }
     emit_field session_id
     emit_field cwd
@@ -81,8 +97,8 @@ if [[ -n "$STDIN_JSON" ]]; then
     if [[ -n "$STDIN_JSON" ]] && grep -q '"notification_type"' <<< "$STDIN_JSON"; then
       local ntype
       ntype=$(printf '%s' "$STDIN_JSON" | sed -n 's/.*"notification_type"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
-      printf 'export QWEN_TOOL_NAME=%q\n' "Notification"
-      printf 'export QWEN_TOOL_INPUT=%q\n' "{\"type\":\"$ntype\"}"
+      export "QWEN_TOOL_NAME=Notification"
+      export "QWEN_TOOL_INPUT={\"type\":\"${ntype}\"}"
     fi
   fi
 fi
